@@ -1,6 +1,6 @@
 from distutils.core import setup
 setup(name='pmi',
-      version='1.0',
+      version='1.1',
       py_modules=['pmi'],
       description='Parallel Method Invocation',
       author='Olaf Lenz',

@@ -1,6 +1,6 @@
 import pmi
 import unittest
-from cPickle import PicklingError
+from pickle import PicklingError
 
 # On the frontend
 if __name__ != 'pmi':
@@ -44,11 +44,11 @@ else:
             global mockFuncCalled
 
             self.assertEqual(pmi.call(mockFunc), 42)
-            self.assert_(mockFuncCalled)
+            self.assertTrue(mockFuncCalled)
 
             self.assertFalse('mockFunc2' in globals())
             self.assertEqual(pmi.call('mockFunc2'), 52)
-            self.assert_(pmi.mockFunc2Called)
+            self.assertTrue(pmi.mockFunc2Called)
             self.assertFalse('mockFunc2' in globals())
 
         def testBadArgument(self) :
@@ -159,10 +159,10 @@ else:
         def testImportModule(self) :
             pmi.exec_("import random")
             # check that it's loaded into pmi
-            self.assert_(hasattr(pmi, 'random'))
+            self.assertTrue(hasattr(pmi, 'random'))
             # check that the main namespace is not polluted
             try :
-                exec 'n=random.__name__'
+                exec('n=random.__name__')
                 self.fail("expected a NameError")
             except NameError :
                 pass
@@ -176,7 +176,7 @@ else:
         def testImportModuleAs(self) :
             pmi.exec_("import random as s")
             # check that it's loaded
-            self.assert_(hasattr(pmi, 's'))
+            self.assertTrue(hasattr(pmi, 's'))
             self.assertEqual(pmi.s.__name__, "random")
             # clean up
             pmi.exec_("del(s)")
@@ -224,16 +224,16 @@ else:
                 obj = pmi.create(MockClass)
             else:
                 # on the workers, don't use an argument to make sure
-                # that it is not used 
+                # that it is not used
                 obj = pmi.create()
-            # test whether the class has been initialized correctly 
+            # test whether the class has been initialized correctly
             # (on all workers)
-            self.assert_(isinstance(obj, MockClass))
+            self.assertTrue(isinstance(obj, MockClass))
 
             # delete object
             del(obj)
             pmi.sync()
-            self.assert_(MockClass.delCalled)
+            self.assertTrue(MockClass.delCalled)
 
         def testCreateByString(self) :
             obj = pmi.create("MockClass2")
@@ -256,13 +256,13 @@ else:
             # call via instance
             obj = pmi.create(MockClass)
             self.assertEqual(pmi.call(obj.f), 42)
-            self.assert_(obj.fCalled)
+            self.assertTrue(obj.fCalled)
 
             # call via class
             obj2 = pmi.create(MockClass)
             self.assertFalse(obj2.fCalled)
             self.assertEqual(pmi.call(MockClass.f, obj2), 42)
-            self.assert_(obj2.fCalled)
+            self.assertTrue(obj2.fCalled)
 
             # call via string
             obj3 = pmi.create('MockClass2')
@@ -271,12 +271,12 @@ else:
             # call via instance and method name
             obj4 = pmi.create(MockClass)
             self.assertEqual(pmi.call(obj4, 'f'), 42)
-            self.assert_(obj4.fCalled)
+            self.assertTrue(obj4.fCalled)
 
         def testPMIClassArgument(self):
             global mockFuncArg, mockFuncArgs
             obj = pmi.create(MockClass)
-            self.assert_(isinstance(obj, MockClass))
+            self.assertTrue(isinstance(obj, MockClass))
 
             # pass the PMI class as argument and its id
             pmi.call(mockFunc, obj, id(obj))
@@ -363,8 +363,7 @@ class MockProxyLocal(object):
 if __name__ != 'pmi':
 
     if pmi.isController:
-        class MockProxy(object):
-            __metaclass__ = pmi.Proxy
+        class MockProxy(object, metaclass=pmi.Proxy):
             pmiproxydefs = dict(
                 cls = 'MockProxyLocal',
                 localcall = [ 'f' ],
@@ -377,21 +376,21 @@ if __name__ != 'pmi':
 
     class TestProxyCreateAndDelete(unittest.TestCase):
         def testCreateandDelete(self):
-            self.assert_(not pmi.MockProxyLocal.delCalled)
+            self.assertTrue(not pmi.MockProxyLocal.delCalled)
             if pmi.isController:
                 obj = MockProxy()
-                self.assert_(hasattr(obj, 'pmiobject'))
-                self.assert_(isinstance(obj.pmiobject, pmi.MockProxyLocal))
-                self.assert_(hasattr(obj, 'pmiinit'))
+                self.assertTrue(hasattr(obj, 'pmiobject'))
+                self.assertTrue(isinstance(obj.pmiobject, pmi.MockProxyLocal))
+                self.assertTrue(hasattr(obj, 'pmiinit'))
                 del(obj)
             else:
                 pmiobj = pmi.create()
-                self.assert_(isinstance(pmiobj, pmi.MockProxyLocal))
+                self.assertTrue(isinstance(pmiobj, pmi.MockProxyLocal))
                 del(pmiobj)
 
             pmi.sync()
-            self.assert_(pmi.MockProxyLocal.delCalled)
-        
+            self.assertTrue(pmi.MockProxyLocal.delCalled)
+
     class TestProxy(unittest.TestCase) :
         def setUp(self):
             global mockFuncArg
@@ -438,7 +437,7 @@ if __name__ != 'pmi':
             else:
                 self.assertEqual(pmi.call(), 72)
             self.assertEqual(self.pmiobj.called, 'f4')
-            
+
         def testProperty(self):
             if pmi.isController:
                 self.obj.x = 42
@@ -455,12 +454,11 @@ if __name__ != 'pmi':
                 pmi.call()
             self.assertEqual(mockFuncArg, self.pmiobj)
 
-        
+
     class TestModifiedProxy(unittest.TestCase):
         def testUserSuppliedInit(self):
             if pmi.isController:
-                class MockProxy(object):
-                    __metaclass__ = pmi.Proxy
+                class MockProxy(object, metaclass=pmi.Proxy):
                     pmiproxydefs = dict(cls='MockProxyLocal')
 
                     def __init__(self, arg):
@@ -469,24 +467,23 @@ if __name__ != 'pmi':
 
                 obj = MockProxy(42)
                 pmiobj = obj.pmiobject
-                self.assert_(hasattr(obj, 'arg'))
+                self.assertTrue(hasattr(obj, 'arg'))
                 self.assertEqual(obj.arg, 42)
-                self.assert_(isinstance(pmiobj, pmi.MockProxyLocal))
+                self.assertTrue(isinstance(pmiobj, pmi.MockProxyLocal))
                 self.assertEqual(pmiobj.arg, 52)
                 del(pmiobj)
                 del(obj)
                 pmi.sync()
             else:
                 pmiobj = pmi.create()
-                self.assert_(isinstance(pmiobj, pmi.MockProxyLocal))
+                self.assertTrue(isinstance(pmiobj, pmi.MockProxyLocal))
                 self.assertEqual(pmiobj.arg, 52)
                 del(pmiobj)
                 pmi.sync()
 
         def testUserSuppliedFunction(self):
             if pmi.isController:
-                class MockProxy(object):
-                    __metaclass__ = pmi.Proxy
+                class MockProxy(object, metaclass=pmi.Proxy):
                     pmiproxydefs = dict(cls='MockProxyLocal')
 
                     def f4(self):
@@ -524,12 +521,10 @@ class MockProxyLocalDerived(MockProxyLocalBase):
 if __name__ != 'pmi':
 
     if pmi.isController:
-        class MockProxyAbstractBase(object):
-            __metaclass__ = pmi.Proxy
+        class MockProxyAbstractBase(object, metaclass=pmi.Proxy):
             pmiproxydefs = dict(pmicall=['f', 'g'])
 
-        class MockProxyDerived(MockProxyAbstractBase):
-            __metaclass__ = pmi.Proxy
+        class MockProxyDerived(MockProxyAbstractBase, metaclass=pmi.Proxy):
             pmiproxydefs = dict(cls='MockProxyLocalDerived')
 
     class TestProxyHierarchy(unittest.TestCase):
@@ -537,12 +532,12 @@ if __name__ != 'pmi':
             if pmi.isController:
                 obj = MockProxyDerived()
                 pmiobj = obj.pmiobject
-                self.assert_(hasattr(obj, 'f'))
-                self.assert_(hasattr(obj, 'g'))
-                self.assert_(isinstance(pmiobj, pmi.MockProxyLocalDerived))
+                self.assertTrue(hasattr(obj, 'f'))
+                self.assertTrue(hasattr(obj, 'g'))
+                self.assertTrue(isinstance(pmiobj, pmi.MockProxyLocalDerived))
             else:
                 pmiobj = pmi.create()
-                self.assert_(isinstance(pmiobj, pmi.MockProxyLocalDerived))
+                self.assertTrue(isinstance(pmiobj, pmi.MockProxyLocalDerived))
 
         def testCallInherited(self):
             if pmi.isController:
@@ -564,23 +559,22 @@ if __name__ != 'pmi':
                 pmiobj = pmi.create()
                 pmi.call()
 
-            self.assert_(hasattr(pmiobj, 'fDerivedCalled'))
-            self.assert_(hasattr(pmiobj, 'fCalled'))
+            self.assertTrue(hasattr(pmiobj, 'fDerivedCalled'))
+            self.assertTrue(hasattr(pmiobj, 'fCalled'))
             self.assertEqual(pmiobj.arg, 42)
             self.assertEqual(pmiobj.arg2, 52)
 
         def testCallRedefined(self):
             if pmi.isController:
-                class MockProxyDerived(MockProxyAbstractBase):
-                    __metaclass__ = pmi.Proxy
-                    pmiproxydefs = dict(cls='MockProxyLocalDerived', 
+                class MockProxyDerived(MockProxyAbstractBase, metaclass=pmi.Proxy):
+                    pmiproxydefs = dict(cls='MockProxyLocalDerived',
                                         localcall=['f'])
-            
+
                 obj = MockProxyDerived()
                 pmiobj = obj.pmiobject
                 obj.f(52)
-                self.assert_(hasattr(pmiobj, 'fDerivedCalled'))
-                self.assert_(hasattr(pmiobj, 'fCalled'))
+                self.assertTrue(hasattr(pmiobj, 'fDerivedCalled'))
+                self.assertTrue(hasattr(pmiobj, 'fCalled'))
                 self.assertEqual(pmiobj.arg, 42)
                 self.assertEqual(pmiobj.arg2, 52)
             else:
