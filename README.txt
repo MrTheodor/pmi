@@ -8,7 +8,7 @@ serial Python scripts.
 
 Requirements
 ------------
-- Python version 2.4+
+- Python version 3.6+
 - An MPI module: 
   - mpi4py (http://mpi4py.scipy.org/) is recommended and can be
     installed from PyPI via easy_install or pip.
