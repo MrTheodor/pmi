@@ -30,7 +30,6 @@ PMI is a pure python module that allows libraries to provide functions
 that are parallelized using MPI but that can nontheless be called from
 serial Python scripts.
 
-PMI requires Python 3.5+, furthermore it
+PMI requires Python 3.6+, furthermore it
 requires a working MPI module (e.g. mpi4py or boostmpi).
-""",
-      )
+""")
