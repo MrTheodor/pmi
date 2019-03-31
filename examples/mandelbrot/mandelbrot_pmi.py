@@ -16,9 +16,12 @@ def mandelbrot_func(x, y, maxit):
         it += 1
     return it
 
-def mandelbrot_parallel((x1, y1), (x2, y2), (w, h), maxit):
+def mandelbrot_parallel(xxx_todo_changeme, xxx_todo_changeme1, xxx_todo_changeme2, maxit):
     """Computes the local lines of the mandelbrot set between (x1, y1)
     and (x2, y2), using maximally maxit iterations for each point."""
+    (x1, y1) = xxx_todo_changeme
+    (x2, y2) = xxx_todo_changeme1
+    (w, h) = xxx_todo_changeme2
     before = time.time()
 
     ##################################################
@@ -49,8 +52,8 @@ def mandelbrot_parallel((x1, y1), (x2, y2), (w, h), maxit):
     I = np.arange(rank, h, size, dtype='l')
 
     after = time.time()
-    print('%f seconds for initial communication on task %d.'
-          % ((after-before, pmi.rank)))
+    print(('%f seconds for initial communication on task %d.'
+          % ((after-before, pmi.rank))))
 
     before = time.time()
 
@@ -64,8 +67,8 @@ def mandelbrot_parallel((x1, y1), (x2, y2), (w, h), maxit):
             C[k, j] = mandelbrot_func(x, y, maxit)
 
     after = time.time()
-    print('%f seconds for computation on task %d.'
-          % ((after-before, pmi.rank)))
+    print(('%f seconds for computation on task %d.'
+          % ((after-before, pmi.rank))))
 
     before = time.time()
 
@@ -91,8 +94,8 @@ def mandelbrot_parallel((x1, y1), (x2, y2), (w, h), maxit):
                  root=pmi.CONTROLLER)
 
     after = time.time()
-    print('%f seconds for final communication on task %d.'
-          % ((after-before), pmi.rank))
+    print(('%f seconds for final communication on task %d.'
+          % ((after-before), pmi.rank)))
 
     if pmi.isWorker: return
     M = np.zeros([h, w], dtype='l')
@@ -106,4 +109,3 @@ def mandelbrot(c1, c2, size, maxit):
     point."""
     return pmi.call('mandelbrot_pmi.mandelbrot_parallel',
                     c1, c2, size, maxit)
-

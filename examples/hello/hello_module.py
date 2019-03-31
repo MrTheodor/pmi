@@ -6,5 +6,4 @@ pmi.setup()
 # No parallel code!
 res = hello('Olaf')
 
-print('\n'.join(res))
-
+print(('\n'.join(res)))
