@@ -1,6 +1,13 @@
-import pmi
 import unittest
 from pickle import PicklingError
+
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+import pmi
+
 
 # On the frontend
 if __name__ != 'pmi':
@@ -36,9 +43,9 @@ else:
             pmi.sync()
 
         def testBuiltinFunction(self):
-            self.assertEqual(pmi.call(zip), [])
+            self.assertEqual(list(pmi.call(zip)), [])
             # by string
-            self.assertEqual(pmi.call('zip'), [])
+            self.assertEqual(list(pmi.call('zip')), [])
 
         def testFunction(self):
             global mockFuncCalled
@@ -106,7 +113,7 @@ else:
 
         def testNonPicklable(self):
             if pmi.isController:
-                self.assertRaises(PicklingError, pmi.call, mockFunc, arg=lambda x: x)
+                self.assertRaises((AttributeError, PicklingError), pmi.call, mockFunc, arg=lambda x: x)
 
     # test pmi invoke
     class TestInvoke(unittest.TestCase) :

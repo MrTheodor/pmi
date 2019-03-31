@@ -20,7 +20,7 @@
 ************************************
 
 PMI allows users to write serial Python scripts that use functions and
-classes that are executed in parallel. 
+classes that are executed in parallel.
 
 PMI is intended to be used in data-parallel environments, where
 several threads run in parallel and can communicate via MPI.
@@ -145,6 +145,7 @@ The pmi module defines the following useful constants and variables:
 """
 import logging, types, sys, inspect, os
 
+
 __author__ = 'Olaf Lenz'
 __email__ = 'olaf at lenz dot name'
 __version__ = '1.0'
@@ -171,7 +172,7 @@ def import_(*args) :
     all workers.
 
     Example:
-    
+
     >>> pmi.import_('hello')
     >>> hw = pmi.create('hello.HelloWorld')
     """
@@ -179,7 +180,7 @@ def import_(*args) :
     if isController:
         if len(args) == 0:
             raise UserError('pmi.import_ expects exactly 1 argument on controller!')
-            
+
         # broadcast the statement
         _broadcast(_IMPORT, *args)
         # locally execute the statement
@@ -207,14 +208,14 @@ def exec_(*args) :
     workers.
 
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create('hello.HelloWorld')
     """
     if __checkController(exec_) :
         if len(args) == 0:
             raise UserError('pmi.exec_ expects at least one argument(s) on controller!')
-            
+
         # broadcast the statement
         _broadcast(_EXEC, *args)
         # locally execute the statement
@@ -255,7 +256,7 @@ def create(cls=None, *args, **kwds) :
     have been imported to pmi via `exec_()` or `import_()`.
 
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create('hello.HelloWorld')
     >>> print(hw)
@@ -266,7 +267,7 @@ def create(cls=None, *args, **kwds) :
     Alternative:
     Note that in this case the class has to be imported to the
     calling module *and* via PMI.
-    
+
     >>> import hello
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create(hello.HelloWorld)
@@ -334,17 +335,17 @@ def call(*args, **kwds) :
     returned.
     Only functions that are known to PMI can be used, that is functions
     that have been imported to pmi via `exec_()` or `import_()`.
-    
+
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create('hello.HelloWorld')
     >>> pmi.call(hw.hello)
     >>> # equivalent:
     >>> pmi.call('hello.HelloWorld', hw)
-    
+
     Note, that you can use only functions that are know to PMI when
-    `call()` is called, i.e. functions in modules that have 
+    `call()` is called, i.e. functions in modules that have
     been imported via `exec_()`.
     """
     if __checkController(call) :
@@ -395,7 +396,7 @@ def invoke(*args, **kwds) :
     that have been imported to pmi via `exec_()` or `import_()`.
 
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create('hello.HelloWorld')
     >>> messages = pmi.invoke(hw.hello())
@@ -441,7 +442,7 @@ def reduce(*args, **kwds) :
     must have been imported to pmi via `exec_()` or `import_()`.
 
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> pmi.exec_('joinstr=lambda a,b: \"\\n\".join(a,b)')
     >>> hw = pmi.create('hello.HelloWorld')
@@ -583,7 +584,7 @@ def __workerStop(doExit) :
 
 def registerAtExit() :
     """Controller command that registers the function
-    `finalizeWorkers()` via atexit. 
+    `finalizeWorkers()` via atexit.
     """
     if __checkController(registerAtExit) :
         import atexit
@@ -649,7 +650,7 @@ class Proxy(type):
 #             return call(setter, method_self.pmiobject, val)
             setter = '.'.join(
                 (method_self.pmiobjectclassdef,
-                 self.propName, 
+                 self.propName,
                  'fset'))
             return _backtranslateProxy(call(setter, method_self, val))
 
@@ -664,7 +665,7 @@ class Proxy(type):
             # now generate the methods of the Proxy object
             if 'cls' in defs:
                 pmiobjectclassdef = defs['cls']
-                log.info('Defining PMI proxy class %s for pmi object class %s.' 
+                log.info('Defining PMI proxy class %s for pmi object class %s.'
                          % (name, pmiobjectclassdef))
 
                 # define cls.pmiinit
@@ -678,19 +679,19 @@ class Proxy(type):
             if 'localcall' in defs:
                 for methodName in defs['localcall']:
                     log.debug('  adding local call to %s' % methodName)
-                    cls.__addMethod(methodName, 
+                    cls.__addMethod(methodName,
                                     Proxy._LocalCaller(methodName))
 
             if 'pmicall' in defs:
                 for methodName in defs['pmicall']:
                     log.debug('  adding pmi call to %s' % methodName)
-                    cls.__addMethod(methodName, 
+                    cls.__addMethod(methodName,
                                     Proxy._PMICaller(methodName))
 
             if 'pmiinvoke' in defs:
                 for methodName in defs['pmiinvoke']:
                     log.debug('  adding pmi invoke of %s' % methodName)
-                    cls.__addMethod(methodName, 
+                    cls.__addMethod(methodName,
                                     Proxy._PMIInvoker(methodName))
 
             if 'pmiproperty' in defs:
@@ -787,7 +788,7 @@ def receive(expected=None) :
 ##################################################
 class __OID(object) :
     """Internal class that represents a PMI object id.
-    
+
     An instance of this class can be pickled, so that it can be sent
     via MPI, and it is hashable, so that it can be used as a hash key
     (for OBJECT_CACHE).
@@ -890,11 +891,11 @@ def __mapArgs(func, args, kwds):
     for k, v in kwds.items():
         tkwds[k] = func(v)
     return targs, tkwds
-    
+
 def _translateOID(obj) :
     """Internal function that translates obj into an __OID
     object if it is a PMI object instance.
-        
+
     If the object is not a PMI object, returns obj untouched.
     """
     if hasattr(obj, '__pmioid'):
@@ -943,12 +944,12 @@ def __translateArgs(args, kwds):
     targs, tWorkerKwds = __translateOIDs(args, workerKwds)
 
     return args, controllerKwds, targs, tWorkerKwds
-    
+
 
 def _backtranslateOID(obj) :
     """Internal worker function that backtranslates an __OID object
     into the corresponding PMI worker instance.
-    
+
     If the object is not an __OID object, returns the object untouched.
     """
     if type(obj) is __OID:
@@ -1007,7 +1008,7 @@ def __translateFunctionArgs(*args):
     arg0 = args[0]
     if arg0 is None:
         raise TypeError("pmi expects function argument on controller")
-    if isinstance(arg0, (str,)):
+    if isinstance(arg0, str):
         tfunction = arg0
         function = eval(arg0, globals())
         rargs = args[1:]
@@ -1025,7 +1026,7 @@ def __translateFunctionArgs(*args):
         if len(args) <= 1:
             raise TypeError("got an object as first argument, but nothing as second")
         arg1 = args[1]
-        if isinstance(arg1, (str,)):
+        if isinstance(arg1, str):
             tfunction = __Method(arg1, arg0)
             function = tfunction
             rargs = args[2:]
@@ -1049,7 +1050,7 @@ def __translateReduceOpArgs(*args):
 
 def __backtranslateReduceOpArg(arg0):
     function = _MPIBacktranslateReduceOp(arg0)
-    if function is not None: 
+    if function is not None:
         return function
     else:
         return __backtranslateFunctionArg(arg0)
@@ -1064,7 +1065,7 @@ def __formatCall(function, args, kwds) :
     return '%s(%s)' % (function, formatArgs(args, kwds))
 
 # map of command names and associated worker functions
-_CMD = [ 
+_CMD = [
     ('EXEC', __workerExec_),
     ('IMPORT', __workerImport_),
     ('EXECFILE', __workerExecfile_),
@@ -1075,7 +1076,7 @@ _CMD = [
     ('DELETE', __workerDelete),
     ('SYNC', __workerSync),
     ('STOP', __workerStop),
-    ('DUMP', __workerDump) 
+    ('DUMP', __workerDump)
     ]
 
 _MAXCMD = len(_CMD)
@@ -1115,9 +1116,11 @@ def _MPIInit(comm=MPI.COMM_WORLD):
     if isController :
         workerStr = 'Controller'
         log = logging.getLogger('%s.controller' % __name__)
+        log.setLevel(logging.DEBUG)
     else :
         workerStr = 'Worker %d' % rank
         log = logging.getLogger('%s.worker%d' % (__name__, rank))
+        log.setLevel(logging.DEBUG)
 
 def _MPIGather(value):
     global CONTROLLER, _MPIcomm
