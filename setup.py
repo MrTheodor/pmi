@@ -1,6 +1,6 @@
 from distutils.core import setup
 setup(name='pmi',
-      version='1.1',
+      version='2.0',
       py_modules=['pmi'],
       description='Parallel Method Invocation',
       author='Olaf Lenz',
@@ -14,10 +14,6 @@ setup(name='pmi',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 2.4',
-        'Programming Language :: Python :: 2.5',
-        'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
         'Environment :: Other Environment',
         'License :: OSI Approved :: GNU General Public License (GPL)',
         'Topic :: Scientific/Engineering',
@@ -34,7 +30,6 @@ PMI is a pure python module that allows libraries to provide functions
 that are parallelized using MPI but that can nontheless be called from
 serial Python scripts.
 
-PMI requires Python 2.4+ and is compatible to Python 3, furthermore it
+PMI requires Python 3.6+, furthermore it
 requires a working MPI module (e.g. mpi4py or boostmpi).
-""",
-      )
+""")

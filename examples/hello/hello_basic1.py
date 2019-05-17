@@ -12,5 +12,4 @@ def hello_parallel(name):
 # invoke the function on all workers and get the results as a list
 res = pmi.invoke('hello_parallel', 'Olaf')
 
-print('\n'.join(res))
-
+print(('\n'.join(res)))

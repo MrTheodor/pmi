@@ -1,6 +1,13 @@
-import pmi
 import unittest
 from pickle import PicklingError
+
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+import pmi
+
 
 # On the frontend
 if __name__ != 'pmi':

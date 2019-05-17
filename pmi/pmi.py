@@ -870,7 +870,7 @@ def _translateClass(cls):
     """
     if cls is None :
         raise UserError("pmi.create expects at least 1 argument on controller")
-    elif isinstance(cls, (str,)) :
+    elif isinstance(cls, str) :
         return eval(cls)
     elif isinstance(cls, type) :
         return cls
@@ -889,7 +889,7 @@ def __mapArgs(func, args, kwds):
     """
     targs = list(map(func, args))
     tkwds = {}
-    for k, v in kwds.items():
+    for k, v in list(kwds.items()):
         tkwds[k] = func(v)
     return targs, tkwds
 
@@ -1035,7 +1035,7 @@ def __translateFunctionArgs(*args):
     return function, tfunction, rargs
 
 def __backtranslateFunctionArg(arg0):
-    if isinstance(arg0, (str,)):
+    if isinstance(arg0, str):
         return eval(arg0, globals())
     else:
         return arg0
@@ -1059,7 +1059,7 @@ def __backtranslateReduceOpArg(arg0):
 def __formatCall(function, args, kwds) :
     def formatArgs(args, kwds) :
         arglist = [repr(arg) for arg in args]
-        for k, v in kwds.items():
+        for k, v in list(kwds.items()):
             arglist.append('%s=%r' % (k, repr(v)))
         return ', '.join(arglist)
 

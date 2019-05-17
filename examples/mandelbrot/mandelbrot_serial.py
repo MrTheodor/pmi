@@ -10,7 +10,10 @@ def mandelbrot_func(x, y, maxit):
         it += 1
     return it
 
-def mandelbrot((x1, y1), (x2, y2), (w, h), maxit):
+def mandelbrot(xxx_todo_changeme, xxx_todo_changeme1, xxx_todo_changeme2, maxit):
+    (x1, y1) = xxx_todo_changeme
+    (x2, y2) = xxx_todo_changeme1
+    (w, h) = xxx_todo_changeme2
     before = time.time()
 
     dx = (x2 - x1) / w
@@ -25,8 +28,7 @@ def mandelbrot((x1, y1), (x2, y2), (w, h), maxit):
             C[k, j] = mandelbrot_func(x, y, maxit)
 
     after = time.time()
-    print('%f seconds for computation.'
-          % (after-before))
+    print(('%f seconds for computation.'
+          % (after-before)))
 
     return C
-
