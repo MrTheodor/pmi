@@ -36,9 +36,9 @@ else:
             pmi.sync()
 
         def testBuiltinFunction(self):
-            self.assertEqual(pmi.call(zip), [])
+            self.assertEqual(list(pmi.call(zip)), [])
             # by string
-            self.assertEqual(pmi.call('zip'), [])
+            self.assertEqual(list(pmi.call('zip')), [])
 
         def testFunction(self):
             global mockFuncCalled
@@ -106,7 +106,7 @@ else:
 
         def testNonPicklable(self):
             if pmi.isController:
-                self.assertRaises(PicklingError, pmi.call, mockFunc, arg=lambda x: x)
+                self.assertRaises((AttributeError, PicklingError), pmi.call, mockFunc, arg=lambda x: x)
 
     # test pmi invoke
     class TestInvoke(unittest.TestCase) :
