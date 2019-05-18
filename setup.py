@@ -1,12 +1,14 @@
-from distutils.core import setup
+from setuptools import setup
+
 setup(name='pmi',
       version='2.0',
-      py_modules=['pmi'],
+      py_modules=['pmi.pmi'],
       description='Parallel Method Invocation',
       author='Olaf Lenz',
       author_email='olenz@icp.uni-stuttgart.de',
       url='http://github.com/olenz/pmi/',
       download_url='http://github.com/olenz/pmi/downloads',
+      test_suite='tests',
       keywords = ["mpi", "parallel"],
       classifiers=[
         'Development Status :: 4 - Beta',
