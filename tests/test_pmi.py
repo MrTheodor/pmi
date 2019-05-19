@@ -4,13 +4,16 @@ from pickle import PicklingError
 import sys
 import os
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import pmi
+from pmi import pmi
 
+print(pmi)
+
+pmi_name = 'pmi.pmi'
 
 # On the frontend
-if __name__ != 'pmi':
+if __name__ != pmi_name:
     # load the module on all workers
     pmi.execfile_(__file__)
 
@@ -27,7 +30,7 @@ def add(a, b):
     return a + b
 
 # Mock function, visible only to the workers
-if __name__ == 'pmi':
+if __name__ == pmi_name:
     def mockFunc2(arg=None, *args, **kwds):
         global mockFunc2Called, mockFunc2Arg, mockFunc2Args, mockFunc2Kwds
         mockFunc2Called = True
@@ -209,7 +212,7 @@ mockClassDelCalled = False
 class MockOSClass:
     pass
 
-if __name__ == 'pmi':
+if __name__ == pmi_name:
     # This class is visible only to the workers
     class MockClass2(object):
         def f(self, arg=None, *args, **kwds):
@@ -367,7 +370,7 @@ class MockProxyLocal(object):
         return self._x
     x = property(getX, setX)
 
-if __name__ != 'pmi':
+if __name__ != pmi_name:
 
     if pmi.isController:
         class MockProxy(object, metaclass=pmi.Proxy):
@@ -525,7 +528,7 @@ class MockProxyLocalDerived(MockProxyLocalBase):
         self.fDerivedCalled = True
         MockProxyLocalBase.f(self, arg)
 
-if __name__ != 'pmi':
+if __name__ != pmi_name:
 
     if pmi.isController:
         class MockProxyAbstractBase(object, metaclass=pmi.Proxy):
@@ -589,13 +592,6 @@ if __name__ != 'pmi':
                 self.assertFalse(hasattr(pmiobj, 'fDerivedCalled'))
                 self.assertFalse(hasattr(pmiobj, 'fCalled'))
 
-if __name__ != 'pmi':
-    import os
-    logConfigFile = 'log.conf'
-    if os.path.exists(logConfigFile):
-        import logging.config
-        logging.config.fileConfig(logConfigFile)
-    else: print("Didn't read log.conf")
-
+if __name__ == '__main__':
     unittest.main()
 

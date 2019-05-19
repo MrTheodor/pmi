@@ -8,7 +8,7 @@ setup(name='pmi',
       author_email='olenz@icp.uni-stuttgart.de',
       url='http://github.com/olenz/pmi/',
       download_url='http://github.com/olenz/pmi/downloads',
-      test_suite='tests',
+      test_suite='tests.load_tests',
       keywords = ["mpi", "parallel"],
       classifiers=[
         'Development Status :: 4 - Beta',

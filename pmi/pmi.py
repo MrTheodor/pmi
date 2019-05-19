@@ -623,7 +623,6 @@ class Proxy(type):
         def __init__(self, methodName):
             self.methodName = methodName
         def __call__(self, method_self, *args, **kwds):
-            import ipdb; ipdb.set_trace()
             method = getattr(method_self.pmiobject, self.methodName)
             return _backtranslateProxy(call(method, *args, **kwds))
 

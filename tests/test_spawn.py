@@ -5,7 +5,7 @@ import os
 world = MPI.COMM_WORLD
 print('Starter: Spawning.')
 intercomm = world.Spawn(command = sys.executable,
-                        args = [os.path.join(os.path.dirname(__file__), 'test_spawn_child.py')], maxprocs=1)
+                        args = [os.path.join(os.path.dirname(__file__), 'spawn_child.py')], maxprocs=1)
 
 buf = numpy.empty(100, dtype='f')
 print('Starter: Broadcasting %s to children via Intercomm.'
