@@ -472,6 +472,7 @@ if __name__ != pmi_name:
                     pmiproxydefs = dict(cls='MockProxyLocal')
 
                     def __init__(self, arg):
+                        print('MockProxy.__init__')
                         self.arg = arg
                         self.pmiinit(arg+10)
 

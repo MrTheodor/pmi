@@ -178,7 +178,7 @@ def import_(*args) :
     """
     global inWorkerLoop
     if isController:
-        if len(args) == 0:
+        if not args:
             raise UserError('pmi.import_ expects exactly 1 argument on controller!')
 
         # broadcast the statement
@@ -213,7 +213,7 @@ def exec_(*args) :
     >>> hw = pmi.create('hello.HelloWorld')
     """
     if __checkController(exec_) :
-        if len(args) == 0:
+        if not args:
             raise UserError('pmi.exec_ expects at least one argument(s) on controller!')
 
         # broadcast the statement
@@ -240,9 +240,9 @@ def execfile_(file):
     else:
         return receive(_EXECFILE)
 
-def __workerExecfile_(file):
-    log.info("Executing file '%s'", file)
-    exec(compile(open(file).read(), file, 'exec'), globals())
+def __workerExecfile_(filename):
+    log.info("Executing file '%s'", filename)
+    exec(compile(open(filename, 'r').read(), filename, 'exec'), globals())
 
 ##################################################
 ## CREATE
@@ -553,9 +553,9 @@ def startWorkerLoop() :
     inWorkerLoop = True
 
     try :
-        while 1 :
+        while True:
             receive()
-    except StopIteration :
+    except StopIteration:
         inWorkerLoop = False
 
 def finalizeWorkers():
@@ -658,9 +658,23 @@ class Proxy(type):
         newMethod = types.MethodType(caller, cls)
         setattr(cls, methodName, newMethod)
 
-    def __init__(cls, name, bases, dict):
-        if 'pmiproxydefs' in dict:
-            defs = dict['pmiproxydefs']
+    def __init__(cls, name, bases, ns):
+        if 'pmiproxydefs' in ns:
+            defs = ns['pmiproxydefs']
+
+            from collections import Iterable
+
+            for base in bases:
+                if not hasattr(base, 'pmiproxydefs'):
+                    continue
+                for k, v in base.pmiproxydefs.items():
+                    if k == 'cls':
+                        continue
+                    if k in defs:
+                        if isinstance(defs[k], Iterable):
+                            defs[k] = list(defs[k]) + v
+                    else:
+                        defs[k] = v
 
             # now generate the methods of the Proxy object
             if 'cls' in defs:
