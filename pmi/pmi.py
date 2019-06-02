@@ -599,8 +599,9 @@ def registerAtExit() :
 class Proxy(type):
     """A metaclass to be used to create frontend serial objects."""
     class _Initializer(object):
-        def __init__(self, pmiobjectclassdef):
+        def __init__(self, pmiobjectclassdef, super_method=None):
             self.pmiobjectclassdef = pmiobjectclassdef
+            self.super_method = super_method
         def __call__(self, method_self, *args, **kwds):
             # create the pmi object
             log.info('PMI.Proxy of type %s is creating pmi object of type %s',
@@ -611,6 +612,11 @@ class Proxy(type):
                 pmiobjectclass = _translateClass(self.pmiobjectclassdef)
                 method_self.pmiobject = create(pmiobjectclass, *args, **kwds)
                 method_self.pmiobject._pmiproxy = method_self
+                if self.super_method:
+                    print(self.super_method)
+                    print(args)
+                    print(kwds)
+                    self.super_method(method_self, *args, **kwds)
 
     class _LocalCaller(object):
         def __init__(self, methodName):
@@ -662,8 +668,8 @@ class Proxy(type):
         if 'pmiproxydefs' in ns:
             defs = ns['pmiproxydefs']
 
-            from collections import Iterable
-
+            from collections.abc import Iterable
+            # Copy pmiproxydefs from bases classes to the derived.
             for base in bases:
                 if not hasattr(base, 'pmiproxydefs'):
                     continue
@@ -683,8 +689,9 @@ class Proxy(type):
                          % (name, pmiobjectclassdef))
 
                 # define cls.pmiinit
-                cls.__addMethod('pmiinit', Proxy._Initializer(pmiobjectclassdef))
-                if not isinstance(cls.__init__, types.MethodType):
+                cls.__addMethod('pmiinit', Proxy._Initializer(pmiobjectclassdef, cls.__init__))
+                valid_init = isinstance(cls.__init__, (type(type.__call__), types.MethodType, types.FunctionType))
+                if not valid_init:
                     log.debug('  redirecting __init__ to pmiinit')
                     cls.__init__ = cls.pmiinit
             else:
@@ -1112,6 +1119,9 @@ inWorkerLoop = False
 ##################################################
 from mpi4py import MPI
 from mpi4py.MPI import OP_NULL, MAX, MIN, SUM, PROD, LAND, BAND, LOR, BOR, LXOR, BXOR, MAXLOC, MINLOC, REPLACE
+
+log = logging.getLogger('%s.controller' % __name__)
+log.setLevel(logging.DEBUG)
 
 def _MPIInit(comm=MPI.COMM_WORLD):
     # The communicator used by PMI

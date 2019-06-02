@@ -465,55 +465,6 @@ if __name__ != pmi_name:
             self.assertEqual(mockFuncArg, self.pmiobj)
 
 
-    class TestModifiedProxy(unittest.TestCase):
-        def testUserSuppliedInit(self):
-            if pmi.isController:
-                class MockProxy(object, metaclass=pmi.Proxy):
-                    pmiproxydefs = dict(cls='MockProxyLocal')
-
-                    def __init__(self, arg):
-                        print('MockProxy.__init__')
-                        self.arg = arg
-                        self.pmiinit(arg+10)
-
-                obj = MockProxy(42)
-                pmiobj = obj.pmiobject
-                self.assertTrue(hasattr(obj, 'arg'))
-                self.assertEqual(obj.arg, 42)
-                self.assertTrue(isinstance(pmiobj, pmi.MockProxyLocal))
-                self.assertEqual(pmiobj.arg, 52)
-                del(pmiobj)
-                del(obj)
-                pmi.sync()
-            else:
-                pmiobj = pmi.create()
-                self.assertTrue(isinstance(pmiobj, pmi.MockProxyLocal))
-                self.assertEqual(pmiobj.arg, 52)
-                del(pmiobj)
-                pmi.sync()
-
-        def testUserSuppliedFunction(self):
-            if pmi.isController:
-                class MockProxy(object, metaclass=pmi.Proxy):
-                    pmiproxydefs = dict(cls='MockProxyLocal')
-
-                    def f4(self):
-                        self.pmiobject.called = "f4"
-                        return 72
-
-                obj = MockProxy()
-                pmiobj = obj.pmiobject
-                self.assertEqual(obj.f4(), 72)
-                pmi.sync()
-                self.assertEqual(pmiobj.called, 'f4')
-                del(obj)
-                pmi.sync()
-            else:
-                pmiobj = pmi.create()
-                pmi.sync()
-                self.assertFalse(hasattr(pmiobj, 'called'))
-                pmi.sync()
-
 
 class MockProxyLocalBase(object):
     def f(self, arg=None):
