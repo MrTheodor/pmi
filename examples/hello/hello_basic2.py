@@ -10,7 +10,7 @@ if __name__ != 'pmi':
     # invoke the method on all workers and get the results
     res = pmi.invoke('hello_parallel', 'Olaf')
 
-    print('\n'.join(res))
+    print(('\n'.join(res)))
 
 else:
     ##################################################
@@ -20,5 +20,3 @@ else:
 
     def hello_parallel(name):
         return 'Hello %s, this is MPI task %d!' % (name, MPI.COMM_WORLD.rank)
-
-

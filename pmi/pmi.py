@@ -20,7 +20,7 @@
 ************************************
 
 PMI allows users to write serial Python scripts that use functions and
-classes that are executed in parallel. 
+classes that are executed in parallel.
 
 PMI is intended to be used in data-parallel environments, where
 several threads run in parallel and can communicate via MPI.
@@ -145,6 +145,7 @@ The pmi module defines the following useful constants and variables:
 """
 import logging, types, sys, inspect, os
 
+
 __author__ = 'Olaf Lenz'
 __email__ = 'olaf at lenz dot name'
 __version__ = '1.0'
@@ -171,15 +172,15 @@ def import_(*args) :
     all workers.
 
     Example:
-    
+
     >>> pmi.import_('hello')
     >>> hw = pmi.create('hello.HelloWorld')
     """
     global inWorkerLoop
     if isController:
-        if len(args) == 0:
+        if not args:
             raise UserError('pmi.import_ expects exactly 1 argument on controller!')
-            
+
         # broadcast the statement
         _broadcast(_IMPORT, *args)
         # locally execute the statement
@@ -207,14 +208,14 @@ def exec_(*args) :
     workers.
 
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create('hello.HelloWorld')
     """
     if __checkController(exec_) :
-        if len(args) == 0:
+        if not args:
             raise UserError('pmi.exec_ expects at least one argument(s) on controller!')
-            
+
         # broadcast the statement
         _broadcast(_EXEC, *args)
         # locally execute the statement
@@ -239,9 +240,9 @@ def execfile_(file):
     else:
         return receive(_EXECFILE)
 
-def __workerExecfile_(file):
-    log.info("Executing file '%s'", file)
-    exec(compile(open(file).read(), file, 'exec'), globals())
+def __workerExecfile_(filename):
+    log.info("Executing file '%s'", filename)
+    exec(compile(open(filename, 'r').read(), filename, 'exec'), globals())
 
 ##################################################
 ## CREATE
@@ -255,7 +256,7 @@ def create(cls=None, *args, **kwds) :
     have been imported to pmi via `exec_()` or `import_()`.
 
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create('hello.HelloWorld')
     >>> print(hw)
@@ -266,7 +267,7 @@ def create(cls=None, *args, **kwds) :
     Alternative:
     Note that in this case the class has to be imported to the
     calling module *and* via PMI.
-    
+
     >>> import hello
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create(hello.HelloWorld)
@@ -334,17 +335,17 @@ def call(*args, **kwds) :
     returned.
     Only functions that are known to PMI can be used, that is functions
     that have been imported to pmi via `exec_()` or `import_()`.
-    
+
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create('hello.HelloWorld')
     >>> pmi.call(hw.hello)
     >>> # equivalent:
     >>> pmi.call('hello.HelloWorld', hw)
-    
+
     Note, that you can use only functions that are know to PMI when
-    `call()` is called, i.e. functions in modules that have 
+    `call()` is called, i.e. functions in modules that have
     been imported via `exec_()`.
     """
     if __checkController(call) :
@@ -395,7 +396,7 @@ def invoke(*args, **kwds) :
     that have been imported to pmi via `exec_()` or `import_()`.
 
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create('hello.HelloWorld')
     >>> messages = pmi.invoke(hw.hello())
@@ -441,7 +442,7 @@ def reduce(*args, **kwds) :
     must have been imported to pmi via `exec_()` or `import_()`.
 
     Example:
-    
+
     >>> pmi.exec_('import hello')
     >>> pmi.exec_('joinstr=lambda a,b: \"\\n\".join(a,b)')
     >>> hw = pmi.create('hello.HelloWorld')
@@ -552,9 +553,9 @@ def startWorkerLoop() :
     inWorkerLoop = True
 
     try :
-        while 1 :
+        while True:
             receive()
-    except StopIteration :
+    except StopIteration:
         inWorkerLoop = False
 
 def finalizeWorkers():
@@ -583,7 +584,7 @@ def __workerStop(doExit) :
 
 def registerAtExit() :
     """Controller command that registers the function
-    `finalizeWorkers()` via atexit. 
+    `finalizeWorkers()` via atexit.
     """
     if __checkController(registerAtExit) :
         import atexit
@@ -598,8 +599,9 @@ def registerAtExit() :
 class Proxy(type):
     """A metaclass to be used to create frontend serial objects."""
     class _Initializer(object):
-        def __init__(self, pmiobjectclassdef):
+        def __init__(self, pmiobjectclassdef, super_method=None):
             self.pmiobjectclassdef = pmiobjectclassdef
+            self.super_method = super_method
         def __call__(self, method_self, *args, **kwds):
             # create the pmi object
             log.info('PMI.Proxy of type %s is creating pmi object of type %s',
@@ -610,6 +612,11 @@ class Proxy(type):
                 pmiobjectclass = _translateClass(self.pmiobjectclassdef)
                 method_self.pmiobject = create(pmiobjectclass, *args, **kwds)
                 method_self.pmiobject._pmiproxy = method_self
+                if self.super_method:
+                    print(self.super_method)
+                    print(args)
+                    print(kwds)
+                    self.super_method(method_self, *args, **kwds)
 
     class _LocalCaller(object):
         def __init__(self, methodName):
@@ -649,7 +656,7 @@ class Proxy(type):
 #             return call(setter, method_self.pmiobject, val)
             setter = '.'.join(
                 (method_self.pmiobjectclassdef,
-                 self.propName, 
+                 self.propName,
                  'fset'))
             return _backtranslateProxy(call(setter, method_self, val))
 
@@ -657,19 +664,34 @@ class Proxy(type):
         newMethod = types.MethodType(caller, cls)
         setattr(cls, methodName, newMethod)
 
-    def __init__(cls, name, bases, dict):
-        if 'pmiproxydefs' in dict:
-            defs = dict['pmiproxydefs']
+    def __init__(cls, name, bases, ns):
+        if 'pmiproxydefs' in ns:
+            defs = ns['pmiproxydefs']
+
+            from collections.abc import Iterable
+            # Copy pmiproxydefs from bases classes to the derived.
+            for base in bases:
+                if not hasattr(base, 'pmiproxydefs'):
+                    continue
+                for k, v in base.pmiproxydefs.items():
+                    if k == 'cls':
+                        continue
+                    if k in defs:
+                        if isinstance(defs[k], Iterable):
+                            defs[k] = list(defs[k]) + v
+                    else:
+                        defs[k] = v
 
             # now generate the methods of the Proxy object
             if 'cls' in defs:
                 pmiobjectclassdef = defs['cls']
-                log.info('Defining PMI proxy class %s for pmi object class %s.' 
+                log.info('Defining PMI proxy class %s for pmi object class %s.'
                          % (name, pmiobjectclassdef))
 
                 # define cls.pmiinit
-                cls.__addMethod('pmiinit', Proxy._Initializer(pmiobjectclassdef))
-                if not isinstance(cls.__init__, types.MethodType):
+                cls.__addMethod('pmiinit', Proxy._Initializer(pmiobjectclassdef, cls.__init__))
+                valid_init = isinstance(cls.__init__, (type(type.__call__), types.MethodType, types.FunctionType))
+                if not valid_init:
                     log.debug('  redirecting __init__ to pmiinit')
                     cls.__init__ = cls.pmiinit
             else:
@@ -678,19 +700,19 @@ class Proxy(type):
             if 'localcall' in defs:
                 for methodName in defs['localcall']:
                     log.debug('  adding local call to %s' % methodName)
-                    cls.__addMethod(methodName, 
+                    cls.__addMethod(methodName,
                                     Proxy._LocalCaller(methodName))
 
             if 'pmicall' in defs:
                 for methodName in defs['pmicall']:
                     log.debug('  adding pmi call to %s' % methodName)
-                    cls.__addMethod(methodName, 
+                    cls.__addMethod(methodName,
                                     Proxy._PMICaller(methodName))
 
             if 'pmiinvoke' in defs:
                 for methodName in defs['pmiinvoke']:
                     log.debug('  adding pmi invoke of %s' % methodName)
-                    cls.__addMethod(methodName, 
+                    cls.__addMethod(methodName,
                                     Proxy._PMIInvoker(methodName))
 
             if 'pmiproperty' in defs:
@@ -787,7 +809,7 @@ def receive(expected=None) :
 ##################################################
 class __OID(object) :
     """Internal class that represents a PMI object id.
-    
+
     An instance of this class can be pickled, so that it can be sent
     via MPI, and it is hashable, so that it can be used as a hash key
     (for OBJECT_CACHE).
@@ -890,11 +912,11 @@ def __mapArgs(func, args, kwds):
     for k, v in list(kwds.items()):
         tkwds[k] = func(v)
     return targs, tkwds
-    
+
 def _translateOID(obj) :
     """Internal function that translates obj into an __OID
     object if it is a PMI object instance.
-        
+
     If the object is not a PMI object, returns obj untouched.
     """
     if hasattr(obj, '__pmioid'):
@@ -943,12 +965,12 @@ def __translateArgs(args, kwds):
     targs, tWorkerKwds = __translateOIDs(args, workerKwds)
 
     return args, controllerKwds, targs, tWorkerKwds
-    
+
 
 def _backtranslateOID(obj) :
     """Internal worker function that backtranslates an __OID object
     into the corresponding PMI worker instance.
-    
+
     If the object is not an __OID object, returns the object untouched.
     """
     if type(obj) is __OID:
@@ -1049,7 +1071,7 @@ def __translateReduceOpArgs(*args):
 
 def __backtranslateReduceOpArg(arg0):
     function = _MPIBacktranslateReduceOp(arg0)
-    if function is not None: 
+    if function is not None:
         return function
     else:
         return __backtranslateFunctionArg(arg0)
@@ -1064,7 +1086,7 @@ def __formatCall(function, args, kwds) :
     return '%s(%s)' % (function, formatArgs(args, kwds))
 
 # map of command names and associated worker functions
-_CMD = [ 
+_CMD = [
     ('EXEC', __workerExec_),
     ('IMPORT', __workerImport_),
     ('EXECFILE', __workerExecfile_),
@@ -1075,7 +1097,7 @@ _CMD = [
     ('DELETE', __workerDelete),
     ('SYNC', __workerSync),
     ('STOP', __workerStop),
-    ('DUMP', __workerDump) 
+    ('DUMP', __workerDump)
     ]
 
 _MAXCMD = len(_CMD)
@@ -1098,6 +1120,9 @@ inWorkerLoop = False
 from mpi4py import MPI
 from mpi4py.MPI import OP_NULL, MAX, MIN, SUM, PROD, LAND, BAND, LOR, BOR, LXOR, BXOR, MAXLOC, MINLOC, REPLACE
 
+log = logging.getLogger('%s.controller' % __name__)
+log.setLevel(logging.DEBUG)
+
 def _MPIInit(comm=MPI.COMM_WORLD):
     # The communicator used by PMI
     global _MPIcomm, CONTROLLER, rank, size, \
@@ -1115,9 +1140,11 @@ def _MPIInit(comm=MPI.COMM_WORLD):
     if isController :
         workerStr = 'Controller'
         log = logging.getLogger('%s.controller' % __name__)
+        log.setLevel(logging.DEBUG)
     else :
         workerStr = 'Worker %d' % rank
         log = logging.getLogger('%s.worker%d' % (__name__, rank))
+        log.setLevel(logging.DEBUG)
 
 def _MPIGather(value):
     global CONTROLLER, _MPIcomm

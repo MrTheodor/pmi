@@ -16,7 +16,7 @@ if __name__ != 'pmi':
 
     # use the class
     hello = Hello('Olaf')
-    print('\n'.join(hello()))
+    print(('\n'.join(hello())))
 
 else:
     ##################################################
@@ -29,4 +29,3 @@ else:
             self.name = name
         def __call__(self):
             return 'Hello %s, this is MPI task %d!' % (self.name, MPI.COMM_WORLD.rank)
-

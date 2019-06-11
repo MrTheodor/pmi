@@ -24,17 +24,17 @@ w = 300
 h = 200
 maxit = 127
 
-print('Computing Mandelbrot set (%dpx x %dpx).' % (w, h))
+print(('Computing Mandelbrot set (%dpx x %dpx).' % (w, h)))
 if serial:
     print('Running serially.')
 else:
-    print('Using %d MPI tasks.' % pmi.size)
+    print(('Using %d MPI tasks.' % pmi.size))
 
 before = time.time()
 M = mandelbrot((x1, y1), (x2, y2), (w, h), maxit)
 after = time.time()
 
-print('Total time: %f seconds.' % (after-before))
+print(('Total time: %f seconds.' % (after-before)))
 
 try:
     from matplotlib import pyplot as plt
@@ -43,4 +43,3 @@ except ImportError:
 else:
     plt.imshow(M, aspect='equal')
     plt.show()
-
