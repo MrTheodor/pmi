@@ -1,17 +1,15 @@
+import pickle
 import unittest
 
 from setup_tests import pmi_name, mockFunc
 from pmi import pmi
 
 
-# On the frontend
-if __name__ != pmi_name:
-    # load the module on all workers
-    pmi.execfile_(__file__)
-
 
 # Mock function, visible only to the workers
 if __name__ != pmi_name:
+    # load the module on all workers
+    pmi.execfile_(__file__)
     # test passing arguments to a pmi call
     class TestPassArguments(unittest.TestCase):
         def setUp(self):
@@ -61,7 +59,7 @@ if __name__ != pmi_name:
 
         def testNonPicklable(self):
             if pmi.isController:
-                self.assertRaises((AttributeError, PicklingError), pmi.call, mockFunc, arg=lambda x: x)
+                self.assertRaises((AttributeError, pickle.PicklingError), pmi.call, mockFunc, arg=lambda x: x)
 
 if __name__ == '__main__':
     unittest.main()

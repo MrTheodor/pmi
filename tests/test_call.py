@@ -1,8 +1,12 @@
 import unittest
+import sys
+import os
 
-from setup_tests import pmi_name, mockFunc, add
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from pmi import pmi
+from setup_tests import pmi_name, mockFunc, add
 
+mockFuncCalled = None
 
 # On the frontend
 if __name__ != pmi_name:
@@ -22,14 +26,7 @@ if __name__ != pmi_name:
             self.assertEqual(list(pmi.call('zip')), [])
 
         def testFunction(self):
-            global mockFuncCalled
-
             self.assertEqual(pmi.call(mockFunc), 42)
-            self.assertTrue(mockFuncCalled)
-
-            self.assertFalse('mockFunc2' in globals())
-            self.assertEqual(pmi.call('mockFunc2'), 52)
-            self.assertTrue(pmi.mockFunc2Called)
             self.assertFalse('mockFunc2' in globals())
 
         def testBadArgument(self) :

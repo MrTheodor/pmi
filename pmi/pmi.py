@@ -598,7 +598,7 @@ def registerAtExit() :
 ##################################################
 class Proxy(type):
     """A metaclass to be used to create frontend serial objects."""
-    class _Initializer(object):
+    class _Initializer:
         def __init__(self, pmiobjectclassdef, super_method=None):
             self.pmiobjectclassdef = pmiobjectclassdef
             self.super_method = super_method
@@ -607,6 +607,7 @@ class Proxy(type):
             log.info('PMI.Proxy of type %s is creating pmi object of type %s',
                      method_self.__class__.__name__,
                      self.pmiobjectclassdef)
+            
             if not _isProxy(method_self):
                 method_self.pmiobjectclassdef = self.pmiobjectclassdef
                 pmiobjectclass = _translateClass(self.pmiobjectclassdef)
@@ -618,28 +619,28 @@ class Proxy(type):
                     print(kwds)
                     self.super_method(method_self, *args, **kwds)
 
-    class _LocalCaller(object):
+    class _LocalCaller:
         def __init__(self, methodName):
             self.methodName = methodName
         def __call__(self, method_self, *args, **kwds):
             method = getattr(method_self.pmiobject, self.methodName)
             return _backtranslateProxy(localcall(method, *args, **kwds))
 
-    class _PMICaller(object):
+    class _PMICaller:
         def __init__(self, methodName):
             self.methodName = methodName
         def __call__(self, method_self, *args, **kwds):
             method = getattr(method_self.pmiobject, self.methodName)
             return _backtranslateProxy(call(method, *args, **kwds))
 
-    class _PMIInvoker(object):
+    class _PMIInvoker:
         def __init__(self, methodName):
             self.methodName = methodName
         def __call__(self, method_self, *args, **kwds):
             method = getattr(method_self.pmiobject, self.methodName)
             return list(map(_backtranslateProxy, invoke(method, *args, **kwds)))
 
-    class _PropertyLocalGetter(object):
+    class _PropertyLocalGetter:
         def __init__(self, propName):
             self.propName = propName
         def __call__(self, method_self):
@@ -647,7 +648,7 @@ class Proxy(type):
             getter = getattr(property, 'fget')
             return _backtranslateProxy(getter(method_self.pmiobject))
 
-    class _PropertyPMISetter(object):
+    class _PropertyPMISetter:
         def __init__(self, propName):
             self.propName = propName
         def __call__(self, method_self, val):
@@ -690,10 +691,11 @@ class Proxy(type):
 
                 # define cls.pmiinit
                 cls.__addMethod('pmiinit', Proxy._Initializer(pmiobjectclassdef, cls.__init__))
-                valid_init = isinstance(cls.__init__, (type(type.__call__), types.MethodType, types.FunctionType))
-                if not valid_init:
-                    log.debug('  redirecting __init__ to pmiinit')
-                    cls.__init__ = cls.pmiinit
+                cls.__init__ = cls.pmiinit
+                #valid_init = isinstance(cls.__init__, (type(type.__call__), types.MethodType, types.FunctionType))
+                #if not valid_init:
+                #    log.debug('  redirecting __init__ to pmiinit')
+                #    cls.__init__ = cls.pmiinit
             else:
                 log.info('Defining abstract PMI proxy class %s.' % name)
 
@@ -807,7 +809,7 @@ def receive(expected=None) :
 ##################################################
 ## INTERNAL FUNTIONS
 ##################################################
-class __OID(object) :
+class __OID :
     """Internal class that represents a PMI object id.
 
     An instance of this class can be pickled, so that it can be sent
@@ -827,7 +829,7 @@ class __OID(object) :
     def __setstate__(self, id):
         self.id = id
 
-class __Destroyer(object):
+class __Destroyer:
     def __init__(self, oid):
         self.oid = oid
         return object.__init__(self)
@@ -835,7 +837,7 @@ class __Destroyer(object):
         log.info("Adding OID to DELETED_OIDS: [%s]", self.oid)
         DELETED_OIDS.append(self.oid)
 
-class __CMD(object) :
+class __CMD :
     """Internal, picklable class that represents a PMI
     command. Intended to be sent via MPI.
     """
@@ -993,7 +995,7 @@ def __backtranslateOIDs(targs, tkwds):
     return __mapArgs(_backtranslateOID, targs, tkwds)
 
 # Wrapper that allows to pickle a method
-class __Method(object) :
+class __Method :
     def __init__(self, funcname, im_self, im_class=None):
         self.__name__ = funcname
         self.__self__ = _translateProxy(im_self)
@@ -1181,7 +1183,7 @@ def _MPIMergeWithParent():
 _REDUCEOP = [ OP_NULL, MAX, MIN, SUM, PROD, LAND, BAND, LOR, BOR,
     LXOR, BXOR, MAXLOC, MINLOC, REPLACE ]
 
-class _ReduceOp(object):
+class _ReduceOp:
     def __init__(self, op):
         self.op = op
     def __getstate__(self):
