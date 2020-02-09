@@ -1,4 +1,5 @@
 # PMI - Parallel Method Invocation
+# Copyright (C) 2020 Jakub Krajniak <jkrajniak at gmail.com>
 # Copyright (C) 2009,2010 Olaf Lenz
 #
 # This program is free software; you can redistribute it and/or modify
@@ -143,29 +144,34 @@ The pmi module defines the following useful constants and variables:
   the workers.
 
 """
-import logging, types, sys, inspect, os
+import logging, types, sys, os
 
+logging.basicConfig(format='%(asctime)-15s:%(name)s %(message)s', level=logging.DEBUG)
 
-__author__ = 'Olaf Lenz'
+__author__ = 'Olaf Lenz, Jakub Krajniak'
 __email__ = 'olaf at lenz dot name'
-__version__ = '1.0'
+__version__ = '2.0'
 __all__ = [
     'exec_', 'import_', 'execfile_',
     'create', 'call', 'invoke', 'reduce', 'localcall',
     'sync', 'receive',
     'startWorkerLoop',
     'finalizeWorkers', 'stopWorkerLoop', 'registerAtExit',
+    'setup',
+    'inWorkerLoop',
     'Proxy',
     'rank', 'size', 'CONTROLLER',
     'isController', 'isWorker',
     'workerStr', 'inWorkerLoop',
-    'UserError'
-    ]
+]
 
 ##################################################
 ## IMPORT
 ##################################################
-def import_(*args) :
+from .errors import UserError, InternalError
+
+
+def import_(*args):
     """Controller command that imports python modules on all workers.
 
     Each element of args should be a module name that is imported to
@@ -188,15 +194,17 @@ def import_(*args) :
     elif not inWorkerLoop:
         return receive(_IMPORT)
 
-def __workerImport_(*modules) :
+
+def __workerImport_(*modules):
     log.info("Importing modules: %s", modules)
-    statement='import ' + ', '.join(modules)
+    statement = 'import ' + ', '.join(modules)
     exec(statement, globals())
+
 
 ##################################################
 ## EXEC
 ##################################################
-def exec_(*args) :
+def exec_(*args):
     """Controller command that executes arbitrary python code on all workers.
 
     exec_() allows to execute arbitrary Python code on all workers.
@@ -212,7 +220,7 @@ def exec_(*args) :
     >>> pmi.exec_('import hello')
     >>> hw = pmi.create('hello.HelloWorld')
     """
-    if __checkController(exec_) :
+    if __checkController(exec_):
         if not args:
             raise UserError('pmi.exec_ expects at least one argument(s) on controller!')
 
@@ -220,10 +228,11 @@ def exec_(*args) :
         _broadcast(_EXEC, *args)
         # locally execute the statement
         return __workerExec_(*args)
-    else :
+    else:
         return receive(_EXEC)
 
-def __workerExec_(*statements) :
+
+def __workerExec_(*statements):
     # executing the statement locally
     for statement in statements:
         log.info("Executing '%s'", statement)
@@ -240,14 +249,16 @@ def execfile_(file):
     else:
         return receive(_EXECFILE)
 
+
 def __workerExecfile_(filename):
     log.info("Executing file '%s'", filename)
     exec(compile(open(filename, 'r').read(), filename, 'exec'), globals())
 
+
 ##################################################
 ## CREATE
 ##################################################
-def create(cls=None, *args, **kwds) :
+def create(cls=None, *args, **kwds):
     """Controller command that creates an object on all workers.
 
     cls describes the (new-style) class that should be instantiated.
@@ -276,7 +287,7 @@ def create(cls=None, *args, **kwds) :
     MPI process #1: Hello World!
     ...
     """
-    if __checkController(create) :
+    if __checkController(create):
         if cls is None:
             raise UserError('pmi.create expects at least 1 argument on controller!')
         cls = _translateClass(cls)
@@ -298,23 +309,27 @@ def create(cls=None, *args, **kwds) :
         obj.__pmidestroyer = __Destroyer(oid)
 
         return obj
-    else :
+    else:
         return receive(_CREATE)
 
-def __workerCreate(cls, oid, *targs, **tkwds) :
+
+def __workerCreate(cls, oid, *targs, **tkwds):
     # backtranslate the arguments
+    log.info(f'__workerCreate {cls} {oid} {targs} {tkwds}')
     args, kwds = __backtranslateOIDs(targs, tkwds)
-    log.info('Creating: %s [%s]'
-             % (__formatCall(cls.__name__, args, kwds), oid))
+    log.info(f'Creating: {__formatCall(cls.__name__, args, kwds)} [{oid}] args={args} kwds={kwds}')
     # create the worker instance
     obj = cls(*args, **kwds)
+    log.info(f'Created {obj} {dir(obj)=}')
 
     if isWorker:
         # store the new object
-        if oid in OBJECT_CACHE :
+        if oid in OBJECT_CACHE:
             raise InternalError("Object [%s] is already in OBJECT_CACHE!" % oid)
+        log.info(f'Stored {obj} in OBJECT_CACHE with {oid}')
         OBJECT_CACHE[oid] = obj
     return obj
+
 
 ##################################################
 ## CLONE
@@ -324,7 +339,7 @@ def __workerCreate(cls, oid, *targs, **tkwds) :
 ##################################################
 ## CALL (INVOKE WITHOUT RESULT)
 ##################################################
-def call(*args, **kwds) :
+def call(*args, **kwds):
     """Call a function on all workers, returning only the return value on the controller.
 
     function denotes the function that is to be called, args and kwds
@@ -348,7 +363,7 @@ def call(*args, **kwds) :
     `call()` is called, i.e. functions in modules that have
     been imported via `exec_()`.
     """
-    if __checkController(call) :
+    if __checkController(call):
         if len(args) == 0:
             raise UserError('pmi.call expects at least 1 argument on controller!')
         cfunction, tfunction, args = __translateFunctionArgs(*args)
@@ -356,14 +371,16 @@ def call(*args, **kwds) :
         _broadcast(_CALL, tfunction, *targs, **tkwds)
         log.info("Calling: %s", __formatCall(cfunction, cargs, ckwds))
         return cfunction(*cargs, **ckwds)
-    else :
+    else:
         return receive(_CALL)
 
-def __workerCall(function, *targs, **tkwds) :
+
+def __workerCall(function, *targs, **tkwds):
     function = __backtranslateFunctionArg(function)
     args, kwds = __backtranslateOIDs(targs, tkwds)
     log.info("Calling: %s", __formatCall(function, args, kwds))
     return function(*args, **kwds)
+
 
 ##################################################
 ## LOCAL CALL
@@ -379,10 +396,11 @@ def localcall(*args, **kwds):
     else:
         raise UserError('Cannot call localcall on worker!')
 
+
 ##################################################
 ## INVOKE
 ##################################################
-def invoke(*args, **kwds) :
+def invoke(*args, **kwds):
     """Invoke a function on all workers, gathering the return values into a list.
 
     function denotes the function that is to be called, args and
@@ -403,29 +421,31 @@ def invoke(*args, **kwds) :
     >>> # alternative:
     >>> messages = pmi.invoke('hello.HelloWorld.hello', hw)
     """
-    if __checkController(invoke) :
+    if __checkController(invoke):
         if len(args) == 0:
             raise UserError('pmi.invoke expects at least 1 argument on controller!')
         cfunction, tfunction, args = __translateFunctionArgs(*args)
         cargs, ckwds, targs, tkwds = __translateArgs(args, kwds)
         _broadcast(_INVOKE, tfunction, *targs, **tkwds)
-        log.info("Invoking: %s", __formatCall(cfunction, cargs, ckwds))
+        log.info(f'Invoking {__formatCall(cfunction, cargs, ckwds)}')
         value = cfunction(*cargs, **ckwds)
         return _MPIGather(value)
-    else :
+    else:
         return receive(_INVOKE)
 
-def __workerInvoke(function, *targs, **tkwds) :
+
+def __workerInvoke(function, *targs, **tkwds):
     function = __backtranslateFunctionArg(function)
     args, kwds = __backtranslateOIDs(targs, tkwds)
-    log.info("Invoking: %s", __formatCall(function, args, kwds))
+    log.info(f'Invoking {function} by __workerInvoke ({targs}) ({tkwds}): {__formatCall(function, args, kwds)}')
     value = function(*args, **kwds)
     return _MPIGather(value)
+
 
 ##################################################
 ## REDUCE (INVOKE WITH REDUCED RESULT)
 ##################################################
-def reduce(*args, **kwds) :
+def reduce(*args, **kwds):
     """Invoke a function on all workers, reducing the return values to
     a single value.
 
@@ -453,7 +473,7 @@ def reduce(*args, **kwds) :
     ...             'hello.HelloWorld.hello', hw)
     ...             )
     """
-    if __checkController(reduce) :
+    if __checkController(reduce):
         if len(args) <= 1:
             raise UserError('pmi.reduce expects at least 2 argument on controller!')
         # handle reduceOp argument
@@ -465,10 +485,11 @@ def reduce(*args, **kwds) :
         value = cfunction(*args, **ckwds)
         log.info("Reducing results via %s", creduceOp)
         return _MPIReduce(op=creduceOp, value=value)
-    else :
+    else:
         return receive(_REDUCE)
 
-def __workerReduce(reduceOp, function, *targs, **tkwds) :
+
+def __workerReduce(reduceOp, function, *targs, **tkwds):
     reduceOp = __backtranslateReduceOpArg(reduceOp)
     function = __backtranslateFunctionArg(function)
     args, kwds = __backtranslateOIDs(targs, tkwds)
@@ -476,6 +497,7 @@ def __workerReduce(reduceOp, function, *targs, **tkwds) :
     value = function(*args, **kwds)
     log.info("Reducing results via %s", reduceOp)
     return _MPIReduce(op=reduceOp, value=value)
+
 
 ##################################################
 ## SYNC
@@ -489,26 +511,30 @@ def sync():
     else:
         receive(_SYNC)
 
+
 def __workerSync():
     """Worker sync is a nop, it only exists for the possible deletion
     of objects.
     """
     pass
 
+
 ##################################################
 ## DUMP
 ##################################################
-def dump() :
+def dump():
     """Controller function that dumps the object cache of PMI. For
     debugging purposes."""
-    if __checkController(dump) :
+    if __checkController(dump):
         _broadcast(_DUMP)
-    else :
+    else:
         receive(_DUMP)
 
-def __workerDump() :
+
+def __workerDump():
     import pprint
     print(("OBJECT_CACHE=%s", pprint.pformat(OBJECT_CACHE)))
+
 
 ##################################################
 ## AUTOMATIC OBJECT DELETION
@@ -521,12 +547,13 @@ def __delete():
         __broadcastCmd(_DELETE, *DELETED_OIDS)
         DELETED_OIDS = []
 
-def __workerDelete(*args) :
+
+def __workerDelete(*args):
     """Deletes the OBJECT_CACHE reference to a PMI object."""
     if len(args) > 0:
         log.info("Deleting oids: %s", args)
         for oid in args:
-            obj=OBJECT_CACHE[oid]
+            obj = OBJECT_CACHE[oid]
             log.debug("  %s [%s]" % (obj, oid))
             # Delete the entry from the cache
             del OBJECT_CACHE[oid]
@@ -535,7 +562,7 @@ def __workerDelete(*args) :
 ##################################################
 ## WORKER LOOP CONTROL
 ##################################################
-def startWorkerLoop() :
+def startWorkerLoop():
     """Worker command that starts the main worker loop.
 
     This function starts a loop that expects to receive PMI commands
@@ -545,83 +572,81 @@ def startWorkerLoop() :
     global inWorkerLoop
 
     # On the controller, leave immediately
-    if isController :
+    if isController:
         log.info('Entering and leaving the worker loop')
         return None
 
     log.info('Entering the worker loop.')
     inWorkerLoop = True
 
-    try :
+    try:
         while True:
             receive()
     except StopIteration:
         inWorkerLoop = False
+
 
 def finalizeWorkers():
     """Controller command that stops and exits all workers.
     """
     stopWorkerLoop(doExit=True)
 
-def stopWorkerLoop(doExit=False) :
+
+def stopWorkerLoop(doExit=False):
     """Controller command that stops all workers.
 
     If doExit is set, the workers exit afterwards.
     """
-    if __checkController(stopWorkerLoop) :
+    if __checkController(stopWorkerLoop):
         log.info('Calling all workers to stop.')
         _broadcast(_STOP, doExit)
-    else :
+    else:
         raise UserError('Cannot call stopWorkerLoop on worker!')
 
-def __workerStop(doExit) :
-    if doExit :
+
+def __workerStop(doExit):
+    if doExit:
         log.info('Stopping worker loop and exiting worker thread.')
         sys.exit()
-    else :
+    else:
         log.info('Stopping worker loop.')
         raise StopIteration()
 
-def registerAtExit() :
+
+def registerAtExit():
     """Controller command that registers the function
     `finalizeWorkers()` via atexit.
     """
-    if __checkController(registerAtExit) :
+    if __checkController(registerAtExit):
         import atexit
         atexit.register(finalizeWorkers)
     else:
         raise UserError('Cannot call registerAtExit on worker!')
-
 
 ##################################################
 ## PROXY METACLASS
 ##################################################
 class Proxy(type):
     """A metaclass to be used to create frontend serial objects."""
+
     class _Initializer:
-        def __init__(self, pmiobjectclassdef, super_method=None):
+        def __init__(self, pmiobjectclassdef):
             self.pmiobjectclassdef = pmiobjectclassdef
-            self.super_method = super_method
+
         def __call__(self, method_self, *args, **kwds):
             # create the pmi object
-            log.info('PMI.Proxy of type %s is creating pmi object of type %s',
-                     method_self.__class__.__name__,
-                     self.pmiobjectclassdef)
-            
+            log.info(f'PMI.Proxy of type {method_self.__class__.__name__} is creating pmi object of type {self.pmiobjectclassdef} with ({args}) and ({kwds})')
+
             if not _isProxy(method_self):
                 method_self.pmiobjectclassdef = self.pmiobjectclassdef
                 pmiobjectclass = _translateClass(self.pmiobjectclassdef)
                 method_self.pmiobject = create(pmiobjectclass, *args, **kwds)
                 method_self.pmiobject._pmiproxy = method_self
-                if self.super_method:
-                    print(self.super_method)
-                    print(args)
-                    print(kwds)
-                    self.super_method(method_self, *args, **kwds)
 
     class _LocalCaller:
         def __init__(self, methodName):
             self.methodName = methodName
+
         def __call__(self, method_self, *args, **kwds):
             method = getattr(method_self.pmiobject, self.methodName)
             return _backtranslateProxy(localcall(method, *args, **kwds))
@@ -629,6 +654,7 @@ class Proxy(type):
     class _PMICaller:
         def __init__(self, methodName):
             self.methodName = methodName
+
         def __call__(self, method_self, *args, **kwds):
             method = getattr(method_self.pmiobject, self.methodName)
             return _backtranslateProxy(call(method, *args, **kwds))
@@ -636,6 +662,7 @@ class Proxy(type):
     class _PMIInvoker:
         def __init__(self, methodName):
             self.methodName = methodName
+
         def __call__(self, method_self, *args, **kwds):
             method = getattr(method_self.pmiobject, self.methodName)
             return list(map(_backtranslateProxy, invoke(method, *args, **kwds)))
@@ -643,6 +670,7 @@ class Proxy(type):
     class _PropertyLocalGetter:
         def __init__(self, propName):
             self.propName = propName
+
         def __call__(self, method_self):
             property = getattr(method_self.pmiobject.__class__, self.propName)
             getter = getattr(property, 'fget')
@@ -651,10 +679,8 @@ class Proxy(type):
     class _PropertyPMISetter:
         def __init__(self, propName):
             self.propName = propName
+
         def __call__(self, method_self, val):
-#             property = getattr(method_self.pmiobject.__class__, self.propName)
-#             setter = getattr(property, 'fset')
-#             return call(setter, method_self.pmiobject, val)
             setter = '.'.join(
                 (method_self.pmiobjectclassdef,
                  self.propName,
@@ -666,94 +692,50 @@ class Proxy(type):
         setattr(cls, methodName, newMethod)
 
     def __init__(cls, name, bases, ns):
+        log.debug(f'Proxy.__init__ {name=} {bases=} {ns=}')
         if 'pmiproxydefs' in ns:
             defs = ns['pmiproxydefs']
-
-            from collections.abc import Iterable
-            # Copy pmiproxydefs from bases classes to the derived.
-            for base in bases:
-                if not hasattr(base, 'pmiproxydefs'):
-                    continue
-                for k, v in base.pmiproxydefs.items():
-                    if k == 'cls':
-                        continue
-                    if k in defs:
-                        if isinstance(defs[k], Iterable):
-                            defs[k] = list(defs[k]) + v
-                    else:
-                        defs[k] = v
 
             # now generate the methods of the Proxy object
             if 'cls' in defs:
                 pmiobjectclassdef = defs['cls']
-                log.info('Defining PMI proxy class %s for pmi object class %s.'
-                         % (name, pmiobjectclassdef))
+                log.info(f'Defining PMI proxy class {name} for pmi object class {pmiobjectclassdef}.')
 
                 # define cls.pmiinit
-                cls.__addMethod('pmiinit', Proxy._Initializer(pmiobjectclassdef, cls.__init__))
-                cls.__init__ = cls.pmiinit
-                #valid_init = isinstance(cls.__init__, (type(type.__call__), types.MethodType, types.FunctionType))
-                #if not valid_init:
-                #    log.debug('  redirecting __init__ to pmiinit')
-                #    cls.__init__ = cls.pmiinit
+                cls.__addMethod('pmiinit', Proxy._Initializer(pmiobjectclassdef))
+                if not isinstance(cls.__init__, types.MethodType):
+                    log.debug('  redirecting __init__ to pmiinit')
+                    cls.__init__ = cls.pmiinit
             else:
-                log.info('Defining abstract PMI proxy class %s.' % name)
+                log.info(f'Defining abstract PMI proxy class {name}.')
 
             if 'localcall' in defs:
                 for methodName in defs['localcall']:
-                    log.debug('  adding local call to %s' % methodName)
-                    cls.__addMethod(methodName,
-                                    Proxy._LocalCaller(methodName))
+                    log.debug(f'  adding local call to {methodName}')
+                    cls.__addMethod(methodName, Proxy._LocalCaller(methodName))
 
             if 'pmicall' in defs:
                 for methodName in defs['pmicall']:
-                    log.debug('  adding pmi call to %s' % methodName)
-                    cls.__addMethod(methodName,
-                                    Proxy._PMICaller(methodName))
+                    log.debug(f'  adding pmi call to {methodName}')
+                    cls.__addMethod(methodName, Proxy._PMICaller(methodName))
 
             if 'pmiinvoke' in defs:
                 for methodName in defs['pmiinvoke']:
-                    log.debug('  adding pmi invoke of %s' % methodName)
-                    cls.__addMethod(methodName,
-                                    Proxy._PMIInvoker(methodName))
+                    log.debug(f'  adding pmi invoke of {methodName}')
+                    cls.__addMethod(methodName, Proxy._PMIInvoker(methodName))
 
             if 'pmiproperty' in defs:
                 for propname in defs['pmiproperty']:
-                    log.debug('  adding pmi property %s' % propname)
+                    log.debug(f'  adding pmi property {propname}')
                     newprop = property(
                         Proxy._PropertyLocalGetter(propname),
                         Proxy._PropertyPMISetter(propname))
                     setattr(cls, propname, newprop)
 
 ##################################################
-## CONSTANTS AND EXCEPTIONS
-##################################################
-
-class InternalError(Exception):
-    """Raised when PMI has encountered an internal error.
-
-    Hopefully, this exceptions is never raised."""
-    def __init__(self, msg):
-        self.msg = msg
-    def __str__(self) :
-        return workerStr + ': ' + self.msg
-    def __repr__(self) :
-        return str(self)
-
-class UserError(Exception):
-    """Raised when PMI has encountered a user error.
-    """
-    def __init__(self, msg):
-        self.msg = msg
-    def __str__(self) :
-        return workerStr + ': ' + self.msg
-    def __repr__(self) :
-        return str(self)
-
-##################################################
 ## BROADCAST AND RECEIVE
 ##################################################
-def _broadcast(cmd, *args, **kwds) :
+def _broadcast(cmd, *args, **kwds):
     """Internal controller command that actually broadcasts a PMI command.
 
     The function first checks whether cmd is a valid PMI command, then
@@ -765,16 +747,18 @@ def _broadcast(cmd, *args, **kwds) :
     log.debug("Broadcasting command: %s", _CMD[cmd][0])
     __broadcastCmd(cmd, *args, **kwds)
 
-def __broadcastCmd(cmd, *args, **kwds) :
+
+def __broadcastCmd(cmd, *args, **kwds):
     """This wraps a command with its argument into an internal __CMD
     object, so that it can be safely sent via MPI. __CMD is
     pciklable."""
-    if not _checkCommand(cmd) :
+    if not _checkCommand(cmd):
         raise InternalError('_broadcast needs a PMI command as first argument. Got %s instead!' % cmd)
     cmdobj = __CMD(cmd, args, kwds)
     _MPIBroadcast(cmdobj)
 
-def receive(expected=None) :
+
+def receive(expected=None):
     """Worker command that receives and handles the next PMI command.
 
     This function waits to receive and handle a single PMI command. If
@@ -798,7 +782,7 @@ def receive(expected=None) :
         __workerDelete(*args)
         # recursively call receive once more
         return receive(expected)
-    elif expected is not None and cmd != expected :
+    elif expected is not None and cmd != expected:
         # otherwise test whether the command is expected
         raise UserError("Received PMI command %s but expected %s" % (_CMD[cmd][0], _CMD[expected][0]))
     # determine which function to call
@@ -806,47 +790,78 @@ def receive(expected=None) :
     log.debug("Calling function %s", __formatCall(cmd_func.__name__, args, kwds))
     return cmd_func(*args, **kwds)
 
+
+def _translateClass(cls):
+    """Returns the class object of the class described by cls.
+    """
+    if cls is None:
+        raise UserError("pmi.create expects at least 1 argument on controller")
+    elif isinstance(cls, str):
+        return eval(cls)
+    elif isinstance(cls, type):
+        return cls
+    elif isinstance(cls, type):
+        raise TypeError("""PMI cannot use old-style classes.
+        Please create old style classes via their names.
+        """)
+    else:
+        raise ValueError("__translateClass expects class as argument, but got %s" % cls)
+
+
+def _isProxy(obj):
+    return hasattr(obj, 'pmiobject')
+
 ##################################################
 ## INTERNAL FUNTIONS
 ##################################################
-class __OID :
+class __OID:
     """Internal class that represents a PMI object id.
 
     An instance of this class can be pickled, so that it can be sent
     via MPI, and it is hashable, so that it can be used as a hash key
     (for OBJECT_CACHE).
     """
-    def __init__(self) :
+
+    def __init__(self):
         self.id = id(self)
+
     def __str__(self):
         return 'oid=0x%x' % self.id
+
     def __hash__(self):
         return self.id
+
     def __eq__(self, obj):
         return self.id == obj.id
+
     def __getstate__(self):
         return self.id
+
     def __setstate__(self, id):
         self.id = id
+
 
 class __Destroyer:
     def __init__(self, oid):
         self.oid = oid
-        return object.__init__(self)
+
     def __del__(self):
         log.info("Adding OID to DELETED_OIDS: [%s]", self.oid)
         DELETED_OIDS.append(self.oid)
 
-class __CMD :
+
+class __CMD:
     """Internal, picklable class that represents a PMI
     command. Intended to be sent via MPI.
     """
-    def __init__(self, cmd, args=None, kwds=None) :
+
+    def __init__(self, cmd, args=None, kwds=None):
         if not _checkCommand(cmd):
-            raise InternalError('Created __CMD object with invalid PMI command %s' % cmd)
+            raise InternalError(f'Created __CMD object with invalid PMI command {cmd}')
         self.cmd = cmd
         self.args = args
         self.kwds = kwds
+
     def __str__(self):
         sargs = [_CMD[self.cmd][0]]
         if hasattr(self, 'args'):
@@ -854,19 +869,20 @@ class __CMD :
         if hasattr(self, 'kwds'):
             sargs.append(str(self.kwds))
         return 'PMICMD(%s)' % (', '.join(sargs))
+
     def __getstate__(self):
         state = (self.cmd, self.args, self.kwds)
         return state
+
     def __setstate__(self, state):
         self.cmd, self.args, self.kwds = state
 
-def _isProxy(obj):
-    return hasattr(obj, 'pmiobject')
 
 def _checkCommand(cmd):
     return 0 <= cmd < _MAXCMD
 
-def __checkController(func) :
+
+def __checkController(func):
     """Checks whether we are on the controller, raises a UserError if
     we are on a worker and in the worker loop.
 
@@ -879,29 +895,14 @@ def __checkController(func) :
         if not inWorkerLoop:
             return False
         else:
-            raise UserError("Cannot call %s on worker while in worker loop!" % func.__name__)
+            raise UserError(f'Cannot call {func.__name__} on worker while in worker loop!')
 
-def __checkWorker(func) :
+
+def __checkWorker(func):
     """Checks whether we are on a worker, raises a UserError if we are not.
     """
     if isController:
-        raise UserError("Cannot call %s on the controller!" % func.__name__)
-
-def _translateClass(cls):
-    """Returns the class object of the class described by cls.
-    """
-    if cls is None :
-        raise UserError("pmi.create expects at least 1 argument on controller")
-    elif isinstance(cls, str) :
-        return eval(cls)
-    elif isinstance(cls, type) :
-        return cls
-    elif isinstance(cls, type) :
-        raise TypeError("""PMI cannot use old-style classes.
-        Please create old style classes via their names.
-        """)
-    else :
-        raise ValueError("__translateClass expects class as argument, but got %s" % cls)
+        raise UserError(f'Cannot call {func.__name__} on the controller!')
 
 
 def __mapArgs(func, args, kwds):
@@ -915,7 +916,8 @@ def __mapArgs(func, args, kwds):
         tkwds[k] = func(v)
     return targs, tkwds
 
-def _translateOID(obj) :
+
+def _translateOID(obj):
     """Internal function that translates obj into an __OID
     object if it is a PMI object instance.
 
@@ -927,11 +929,13 @@ def _translateOID(obj) :
     else:
         return obj
 
+
 def _backtranslateProxy(obj):
     if hasattr(obj, '_pmiproxy'):
         return obj._pmiproxy
     else:
         return obj
+
 
 def _translateProxy(obj):
     if _isProxy(obj):
@@ -939,8 +943,10 @@ def _translateProxy(obj):
     else:
         return obj
 
+
 def __translateProxies(args, kwds):
     return __mapArgs(_translateProxy, args, kwds)
+
 
 def __translateOIDs(args, kwds):
     """Internal function that translates all PMI object instances that
@@ -949,11 +955,12 @@ def __translateOIDs(args, kwds):
     """
     return __mapArgs(_translateOID, args, kwds)
 
+
 def __translateArgs(args, kwds):
     args, kwds = __translateProxies(args, kwds)
 
-    workerKwds={}
-    controllerKwds={}
+    workerKwds = {}
+    controllerKwds = {}
     for k in list(kwds.keys()):
         if k.startswith('__pmictr_'):
             knew = k[9:]
@@ -969,7 +976,7 @@ def __translateArgs(args, kwds):
     return args, controllerKwds, targs, tWorkerKwds
 
 
-def _backtranslateOID(obj) :
+def _backtranslateOID(obj):
     """Internal worker function that backtranslates an __OID object
     into the corresponding PMI worker instance.
 
@@ -983,43 +990,52 @@ def _backtranslateOID(obj) :
             # return anything on the controller?
             return None
         else:
-            raise InternalError("Object [%s] is not in OBJECT_CACHE" % obj)
-    else :
+            raise InternalError(f'Object [{obj}] is not in OBJECT_CACHE')
+    else:
         return obj
+
 
 def __backtranslateOIDs(targs, tkwds):
     """Internal function that backtranslates all __OID object
     instances that occur in args or kwds into the cached PMI objects
     on the worker.
     """
+    log.debug(f'backtranslateOIDs {_backtranslateOID} ({targs=}) ({tkwds=})')
     return __mapArgs(_backtranslateOID, targs, tkwds)
 
+
 # Wrapper that allows to pickle a method
-class __Method :
+class __Method(object):
     def __init__(self, funcname, im_self, im_class=None):
         self.__name__ = funcname
-        self.__self__ = _translateProxy(im_self)
+        self.im_self = _translateProxy(im_self)
         if im_class is None:
-            self.__self__.__class__ = self.__self__.__class__
+            self.im_class = self.im_self.__class__
         else:
-            self.__self__.__class__ = im_class
+            self.im_class = im_class
         self.__determineMethod()
+
     def __getstate__(self):
         return (self.__name__,
-                _translateOID(self.__self__),
-                self.__self__.__class__)
+                _translateOID(self.im_self),
+                self.im_class)
+
     def __setstate__(self, state):
-        self.__name__, self.__self__, self.__self__.__class__ = state
-        self.__self__ = _backtranslateOID(self.__self__)
+        self.__name__, self.im_self, self.im_class = state
+        self.im_self = _backtranslateOID(self.im_self)
         self.__determineMethod()
+
     def __determineMethod(self):
-        for cls in self.__self__.__class__.mro():
+        # log.debug('__determineMethod')
+        for cls in self.im_class.mro():
             if hasattr(cls, self.__name__):
                 function = getattr(cls, self.__name__)
-                self.method = function.__get__(self.__self__, cls)
+                self.method = function.__get__(self.im_self, cls)
                 break
+
     def __call__(self, *args, **kwds):
         return self.method(*args, **kwds)
+
 
 # translate arguments to invoke
 def __translateFunctionArgs(*args):
@@ -1031,11 +1047,14 @@ def __translateFunctionArgs(*args):
     arg0 = args[0]
     if arg0 is None:
         raise TypeError("pmi expects function argument on controller")
+    log.debug(f'__translateFunctionArgs {arg0=} {type(arg0)} {args=}')
     if isinstance(arg0, str):
+        log.debug(f'__translateFunctionArgs {arg0=} is str')
         tfunction = arg0
         function = eval(arg0, globals())
         rargs = args[1:]
     elif isinstance(arg0, (types.FunctionType, types.BuiltinFunctionType, type)):
+        log.debug(f'__translateFunctionArgs {arg0=} is {(types.FunctionType, types.BuiltinFunctionType, type)}')
         if arg0.__name__ == '<lambda>':
             raise ValueError("pmi cannot handle lambda functions")
         tfunction = arg0
@@ -1050,11 +1069,14 @@ def __translateFunctionArgs(*args):
             raise TypeError("got an object as first argument, but nothing as second")
         arg1 = args[1]
         if isinstance(arg1, str):
+            log.debug(f'__translateFunctionArgs {arg0=} is str xxx {arg1=}')
             tfunction = __Method(arg1, arg0)
             function = tfunction
             rargs = args[2:]
-        else: raise ValueError("bad arguments")
+        else:
+            raise ValueError("bad arguments")
     return function, tfunction, rargs
+
 
 def __backtranslateFunctionArg(arg0):
     if isinstance(arg0, str):
@@ -1062,14 +1084,16 @@ def __backtranslateFunctionArg(arg0):
     else:
         return arg0
 
+
 def __translateReduceOpArgs(*args):
-    tfunction =  _MPITranslateReduceOp(*args)
+    tfunction = _MPITranslateReduceOp(*args)
     if tfunction is not None:
         function = args[0]
         rargs = args[1:]
         return function, tfunction, rargs
     else:
         return __translateFunctionArgs(*args)
+
 
 def __backtranslateReduceOpArg(arg0):
     function = _MPIBacktranslateReduceOp(arg0)
@@ -1078,14 +1102,16 @@ def __backtranslateReduceOpArg(arg0):
     else:
         return __backtranslateFunctionArg(arg0)
 
-def __formatCall(function, args, kwds) :
-    def formatArgs(args, kwds) :
+
+def __formatCall(function, args, kwds):
+    def formatArgs(args, kwds):
         arglist = [repr(arg) for arg in args]
         for k, v in list(kwds.items()):
             arglist.append('%s=%r' % (k, repr(v)))
         return ', '.join(arglist)
 
     return '%s(%s)' % (function, formatArgs(args, kwds))
+
 
 # map of command names and associated worker functions
 _CMD = [
@@ -1100,14 +1126,22 @@ _CMD = [
     ('SYNC', __workerSync),
     ('STOP', __workerStop),
     ('DUMP', __workerDump)
-    ]
+]
+
+# define the numerical constants to be used for cmds
+_EXEC = 0
+_IMPORT = 1
+_EXECFILE = 2
+_CREATE = 3
+_INVOKE = 4
+_CALL = 5
+_REDUCE = 6
+_DELETE = 7
+_SYNC = 8
+_STOP = 9
+_DUMP = 10
 
 _MAXCMD = len(_CMD)
-
-# define the numerical constants to be used
-for i in range(len(_CMD)) :
-    exec('_%s=%s' % (_CMD[i][0],i), globals())
-del i
 
 # set that stores which oids have been deleted
 DELETED_OIDS = []
@@ -1122,8 +1156,6 @@ inWorkerLoop = False
 from mpi4py import MPI
 from mpi4py.MPI import OP_NULL, MAX, MIN, SUM, PROD, LAND, BAND, LOR, BOR, LXOR, BXOR, MAXLOC, MINLOC, REPLACE
 
-log = logging.getLogger('%s.controller' % __name__)
-log.setLevel(logging.DEBUG)
 
 def _MPIInit(comm=MPI.COMM_WORLD):
     # The communicator used by PMI
@@ -1139,26 +1171,28 @@ def _MPIInit(comm=MPI.COMM_WORLD):
     isController = rank == CONTROLLER
     isWorker = not isController
 
-    if isController :
+    if isController:
         workerStr = 'Controller'
-        log = logging.getLogger('%s.controller' % __name__)
-        log.setLevel(logging.DEBUG)
-    else :
+        log = logging.getLogger(f'{__name__}.controller')
+    else:
         workerStr = 'Worker %d' % rank
-        log = logging.getLogger('%s.worker%d' % (__name__, rank))
-        log.setLevel(logging.DEBUG)
+        log = logging.getLogger(f'{__name__}.worker{rank}')
+
 
 def _MPIGather(value):
     global CONTROLLER, _MPIcomm
     return _MPIcomm.gather(value, root=CONTROLLER)
 
+
 def _MPIBroadcast(value=None):
     global CONTROLLER, _MPIcomm
     return _MPIcomm.bcast(value, root=CONTROLLER)
 
+
 def _MPIReduce(op, value):
     global CONTROLLER, _MPIcomm
     return _MPIcomm.reduce(value, root=CONTROLLER, op=op)
+
 
 def _MPISpawnAndMerge(ntasks, command):
     cmd = command[0]
@@ -1172,30 +1206,37 @@ def _MPISpawnAndMerge(ntasks, command):
     newcomm = intercomm.Merge(False)
     _MPIInit(newcomm)
 
+
 def _MPIMergeWithParent():
     intercomm = _MPIComm.Get_parent()
     if intercomm == MPI.COMM_NULL: return
     newcomm = intercomm.Merge(True)
     _MPIInit(newcomm)
 
+
 # map of command names and associated worker functions
 
-_REDUCEOP = [ OP_NULL, MAX, MIN, SUM, PROD, LAND, BAND, LOR, BOR,
-    LXOR, BXOR, MAXLOC, MINLOC, REPLACE ]
+_REDUCEOP = [OP_NULL, MAX, MIN, SUM, PROD, LAND, BAND, LOR, BOR,
+             LXOR, BXOR, MAXLOC, MINLOC, REPLACE]
+
 
 class _ReduceOp:
     def __init__(self, op):
         self.op = op
+
     def __getstate__(self):
         i = 0
         for op in _REDUCEOP:
             if self.op is op:
                 return i
             i += 1
+
     def __setstate__(self, state):
         self.op = _REDUCEOP[state]
+
     def getOp(self):
         return self.op
+
 
 def _MPITranslateReduceOp(*args):
     arg0 = args[0]
@@ -1204,30 +1245,32 @@ def _MPITranslateReduceOp(*args):
     else:
         return None
 
+
 def _MPIBacktranslateReduceOp(arg0):
     if isinstance(arg0, _ReduceOp):
         return arg0.getOp()
     else:
         return None
 
+
 ##################################################
 ## SETUP
 ##################################################
-def setup(ntasks=None,
-          taskcmd=(sys.argv[0], os.path.abspath('pmi.py'))):
+def setup(ntasks=None, taskcmd=(sys.argv[0], os.path.abspath('pmi.py'))):
     if isController:
         registerAtExit()
         if ntasks is not None:
             if size > 1:
                 # parallel tasks already running
                 if size != ntasks:
-                    raise UserError('setup() requested to start %d tasks, but %d tasks are already running.' % (ntasks, size))
+                    raise UserError(f'setup() requested to start {ntasks} tasks, but {size} tasks are already running.')
             else:
                 # start ntasks tasks
-                _MPISpawnAndMerge(ntasks-1, taskcmd)
+                _MPISpawnAndMerge(ntasks - 1, taskcmd)
 
     else:
         startWorkerLoop()
+
 
 ##################################################
 ## MODULE BODY
@@ -1239,4 +1282,3 @@ _MPIInit()
 if __name__ == 'main':
     _MPIMergeWithParent()
     startWorkerLoop()
-

@@ -8,9 +8,11 @@ pmi.execfile_('hello_class.py')
 
 # create a frontend class via the proxy
 class Hello(object, metaclass=pmi.Proxy):
-    pmiproxydefs = \
-        dict(cls = 'HelloLocal',
-             pmiinvoke = [ '__call__' ])
+    pmiproxydefs = {
+        'cls': 'HelloLocal',
+        'pmiinvoke': ['__call__'],
+        'pmiproperty': ['name']
+    }
 
 # use the class
 hello = Hello('Olaf')

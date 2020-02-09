@@ -8,6 +8,7 @@ verify_ssl = true
 [packages]
 mpi4py = "*"
 numpy = "*"
+ipdb = "*"
 
 [requires]
-python_version = "3.7"
+python_version = "3.8"
