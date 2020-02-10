@@ -146,6 +146,8 @@ The pmi module defines the following useful constants and variables:
 """
 import logging, types, sys, os
 
+from .errors import UserError, InternalError
+
 logging.basicConfig(format='%(asctime)-15s:%(name)s %(message)s', level=logging.DEBUG)
 
 __author__ = 'Olaf Lenz, Jakub Krajniak'
@@ -165,12 +167,10 @@ __all__ = [
     'workerStr', 'inWorkerLoop',
 ]
 
+
 ##################################################
 ## IMPORT
 ##################################################
-from .errors import UserError, InternalError
-
-
 def import_(*args):
     """Controller command that imports python modules on all workers.
 
@@ -475,7 +475,7 @@ def reduce(*args, **kwds):
     """
     if __checkController(reduce):
         if len(args) <= 1:
-            raise UserError('pmi.reduce expects at least 2 argument on controller!')
+            raise UserError(f'pmi.reduce expects at least 2 argument on controller! {args=}')
         # handle reduceOp argument
         creduceOp, treduceOp, args = __translateReduceOpArgs(*args)
         cfunction, tfunction, args = __translateFunctionArgs(*args)
@@ -623,6 +623,7 @@ def registerAtExit():
     else:
         raise UserError('Cannot call registerAtExit on worker!')
 
+
 ##################################################
 ## PROXY METACLASS
 ##################################################
@@ -635,7 +636,8 @@ class Proxy(type):
 
         def __call__(self, method_self, *args, **kwds):
             # create the pmi object
-            log.info(f'PMI.Proxy of type {method_self.__class__.__name__} is creating pmi object of type {self.pmiobjectclassdef} with ({args}) and ({kwds})')
+            log.info(
+                f'PMI.Proxy of type {method_self.__class__.__name__} is creating pmi object of type {self.pmiobjectclassdef} with ({args}) and ({kwds})')
 
             if not _isProxy(method_self):
                 method_self.pmiobjectclassdef = self.pmiobjectclassdef
@@ -732,6 +734,7 @@ class Proxy(type):
                         Proxy._PropertyPMISetter(propname))
                     setattr(cls, propname, newprop)
 
+
 ##################################################
 ## BROADCAST AND RECEIVE
 ##################################################
@@ -810,6 +813,7 @@ def _translateClass(cls):
 
 def _isProxy(obj):
     return hasattr(obj, 'pmiobject')
+
 
 ##################################################
 ## INTERNAL FUNTIONS
