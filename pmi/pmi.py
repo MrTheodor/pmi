@@ -146,8 +146,6 @@ The pmi module defines the following useful constants and variables:
 """
 import logging, types, sys, os
 
-from .errors import UserError, InternalError
-
 logging.basicConfig(format='%(asctime)-15s:%(name)s %(message)s', level=logging.DEBUG)
 
 __author__ = 'Olaf Lenz, Jakub Krajniak'
@@ -227,7 +225,13 @@ def exec_(*args):
         # broadcast the statement
         _broadcast(_EXEC, *args)
         # locally execute the statement
-        return __workerExec_(*args)
+        if _PMIComm and _PMIComm.isActive():
+            if CONTROLLER in _PMIComm.getMPIcpugroup():
+                return __workerExec_(*args)
+            else:
+                pass
+        else:
+            return __workerExec_(*args)
     else:
         return receive(_EXEC)
 
@@ -245,7 +249,13 @@ def __workerExec_(*statements):
 def execfile_(file):
     if __checkController(execfile_):
         _broadcast(_EXECFILE, file)
-        return __workerExecfile_(file)
+        if _PMIComm and _PMIComm.isActive():
+            if CONTROLLER in _PMIComm.getMPIcpugroup():
+                return __workerExecfile_(file)
+            else:
+                pass
+        else:
+            return __workerExecfile_(file)
     else:
         return receive(_EXECFILE)
 
@@ -370,7 +380,13 @@ def call(*args, **kwds):
         cargs, ckwds, targs, tkwds = __translateArgs(args, kwds)
         _broadcast(_CALL, tfunction, *targs, **tkwds)
         log.info("Calling: %s", __formatCall(cfunction, cargs, ckwds))
-        return cfunction(*cargs, **ckwds)
+        if _PMIComm and _PMIComm.isActive():
+            if CONTROLLER in _PMIComm.getMPIcpugroup():
+                return cfunction(*cargs, **ckwds)
+            else:
+                return None
+        else:
+            return cfunction(*cargs, **ckwds)
     else:
         return receive(_CALL)
 
@@ -393,6 +409,13 @@ def localcall(*args, **kwds):
         args, kwds = __translateProxies(args, kwds)
         log.info("Calling locally: %s", __formatCall(cfunction, args, kwds))
         return cfunction(*args, **kwds)
+    #        if _PMIComm :
+    #            if CONTROLLER in _PMIComm.getMPIcpugroup():
+    #                return cfunction(*args, **kwds)
+    #            else :
+    #                return None
+    #        else :
+    #            return cfunction(*args, **kwds)
     else:
         raise UserError('Cannot call localcall on worker!')
 
@@ -427,8 +450,14 @@ def invoke(*args, **kwds):
         cfunction, tfunction, args = __translateFunctionArgs(*args)
         cargs, ckwds, targs, tkwds = __translateArgs(args, kwds)
         _broadcast(_INVOKE, tfunction, *targs, **tkwds)
-        log.info(f'Invoking {__formatCall(cfunction, cargs, ckwds)}')
-        value = cfunction(*cargs, **ckwds)
+        log.info("Invoking: %s", __formatCall(cfunction, cargs, ckwds))
+        if _PMIComm and _PMIComm.isActive():
+            if CONTROLLER in _PMIComm.getMPIcpugroup():
+                value = cfunction(*cargs, **ckwds)
+            else:
+                value = None
+        else:
+            value = cfunction(*cargs, **ckwds)
         return _MPIGather(value)
     else:
         return receive(_INVOKE)
@@ -482,7 +511,13 @@ def reduce(*args, **kwds):
         cargs, ckwds, targs, tkwds = __translateArgs(args, kwds)
         _broadcast(_REDUCE, treduceOp, tfunction, *targs, **tkwds)
         log.info("Reducing: %s", __formatCall(cfunction, cargs, ckwds))
-        value = cfunction(*args, **ckwds)
+        if _PMIComm and _PMIComm.isActive():
+            if CONTROLLER in _PMIComm.getMPIcpugroup():
+                value = cfunction(*args, **ckwds)
+            else:
+                value = None
+        else:
+            value = cfunction(*args, **ckwds)
         log.info("Reducing results via %s", creduceOp)
         return _MPIReduce(op=creduceOp, value=value)
     else:
@@ -537,6 +572,56 @@ def __workerDump():
 
 
 ##################################################
+## ACTIVATE
+##################################################
+def activate(*args):
+    """Activate"""
+    global _MPIcomm, _PMIComm
+    if _PMIComm and _PMIComm.isActive():
+        log.warning("worker subgroup is already active - deactivate first !")
+    else:
+        if __checkController(activate):
+            pmicomm = args[0]
+            pmioid = pmicomm.localcomm.__pmioid
+            _broadcast(_ACTIVATE, pmioid)
+            _PMIComm = pmicomm
+            _PMIComm.activate()
+        else:
+            pmioid = receive(_ACTIVATE)
+
+
+def __workerActivate(pmioid):
+    global _MPIcomm, _PMIComm
+    pmicomm = _backtranslateOID(pmioid)
+    mpicomm = pmicomm.getMPIsubcommWithController()
+    if mpicomm and mpicomm != MPI.COMM_NULL:
+        _PMIComm = pmicomm
+        _PMIComm.activate()
+
+
+##################################################
+## DEACTIVATE
+##################################################
+def deactivate(*args):
+    """Deactivate"""
+    global _MPIcomm, _PMIComm
+    if _PMIComm and _PMIComm.isActive():
+        if __checkController(deactivate):
+            _broadcast(_DEACTIVATE)
+            _PMIComm.deactivate()
+        else:
+            receive(_DEACTIVATE)
+    else:
+        log.warning("worker subgroup is not active !")
+
+
+def __workerDeActivate():
+    global _MPIcomm, _PMIComm
+    if _PMIComm:
+        _PMIComm.deactivate()
+
+
+##################################################
 ## AUTOMATIC OBJECT DELETION
 ##################################################
 def __delete():
@@ -553,10 +638,13 @@ def __workerDelete(*args):
     if len(args) > 0:
         log.info("Deleting oids: %s", args)
         for oid in args:
-            obj = OBJECT_CACHE[oid]
-            log.debug("  %s [%s]" % (obj, oid))
-            # Delete the entry from the cache
-            del OBJECT_CACHE[oid]
+            try:
+                obj = OBJECT_CACHE[oid]
+                log.debug("  %s [%s]" % (obj, oid))
+                # Delete the entry from the cache
+                del OBJECT_CACHE[oid]
+            except KeyError:
+                log.debug("OID [%s] not found on worker%d" % (oid, _MPIcomm.rank))
 
 
 ##################################################
@@ -733,6 +821,41 @@ class Proxy(type):
                         Proxy._PropertyLocalGetter(propname),
                         Proxy._PropertyPMISetter(propname))
                     setattr(cls, propname, newprop)
+
+
+##################################################
+## CONSTANTS AND EXCEPTIONS
+##################################################
+
+class InternalError(Exception):
+    """Raised when PMI has encountered an internal error.
+
+    Hopefully, this exceptions is never raised."""
+
+    def __init__(self, msg, workerStr):
+        self.msg = msg
+        self.workerStr = workerStr
+
+    def __str__(self):
+        return self.workerStr + ': ' + self.msg
+
+    def __repr__(self):
+        return str(self)
+
+
+class UserError(Exception):
+    """Raised when PMI has encountered a user error.
+    """
+
+    def __init__(self, msg, workerStr):
+        self.msg = msg
+        self.workerStr = workerStr
+
+    def __str__(self):
+        return self.workerStr + ': ' + self.msg
+
+    def __repr__(self):
+        return str(self)
 
 
 ##################################################
@@ -1129,7 +1252,9 @@ _CMD = [
     ('DELETE', __workerDelete),
     ('SYNC', __workerSync),
     ('STOP', __workerStop),
-    ('DUMP', __workerDump)
+    ('DUMP', __workerDump),
+    ('ACTIVATE', __workerActivate),
+    ('DEACTIVATE', __workerDeActivate)
 ]
 
 # define the numerical constants to be used for cmds
@@ -1144,6 +1269,8 @@ _DELETE = 7
 _SYNC = 8
 _STOP = 9
 _DUMP = 10
+_ACTIVATE = 11
+_DEACTIVATE = 12
 
 _MAXCMD = len(_CMD)
 
@@ -1157,15 +1284,16 @@ inWorkerLoop = False
 ##################################################
 ## MPI SETUP
 ##################################################
-from mpi4py import MPI
+import mpi4py.MPI as MPI
 from mpi4py.MPI import OP_NULL, MAX, MIN, SUM, PROD, LAND, BAND, LOR, BOR, LXOR, BXOR, MAXLOC, MINLOC, REPLACE
 
 
 def _MPIInit(comm=MPI.COMM_WORLD):
     # The communicator used by PMI
-    global _MPIcomm, CONTROLLER, rank, size, \
+    global _MPIcomm, _PMIComm, CONTROLLER, rank, size, \
         isController, isWorker, workerStr, log
     _MPIcomm = comm
+    _PMIComm = None
 
     CONTROLLER = 0
     rank = _MPIcomm.rank
@@ -1184,21 +1312,33 @@ def _MPIInit(comm=MPI.COMM_WORLD):
 
 
 def _MPIGather(value):
-    global CONTROLLER, _MPIcomm
-    return _MPIcomm.gather(value, root=CONTROLLER)
+    global CONTROLLER, _MPIcomm, _PMIComm
+    if _PMIComm and _PMIComm.isActive():
+        return _PMIComm.getMPIsubcommWithController().gather(value, root=CONTROLLER)
+    else:
+        return _MPIcomm.gather(value, root=CONTROLLER)
 
 
 def _MPIBroadcast(value=None):
-    global CONTROLLER, _MPIcomm
-    return _MPIcomm.bcast(value, root=CONTROLLER)
+    global CONTROLLER, _MPIcomm, _PMIComm
+    if _PMIComm and _PMIComm.isActive():
+        return _PMIComm.getMPIsubcommWithController().bcast(value, root=CONTROLLER)
+    else:
+        return _MPIcomm.bcast(value, root=CONTROLLER)
 
 
 def _MPIReduce(op, value):
-    global CONTROLLER, _MPIcomm
-    return _MPIcomm.reduce(value, root=CONTROLLER, op=op)
+    global CONTROLLER, _MPIcomm, _PMIComm
+    if _PMIComm and _PMIComm.isActive():
+        return _PMIComm.getMPIsubcommWithController().reduce(value, root=CONTROLLER, op=op)
+    else:
+        return _MPIcomm.reduce(value, root=CONTROLLER, op=op)
 
 
 def _MPISpawnAndMerge(ntasks, command):
+    if _PMIComm and _PMIComm.isActive():
+        raise UserError('Requested to SpawnAndMerge, but worker subcommunicator group is active.')
+
     cmd = command[0]
     if len(command) > 1:
         args = command[1:]
@@ -1212,6 +1352,9 @@ def _MPISpawnAndMerge(ntasks, command):
 
 
 def _MPIMergeWithParent():
+    if _PMIComm and _PMIComm.isActive():
+        raise UserError('Requested to MergeWithParent, but worker subcommunicator group is active.')
+
     intercomm = _MPIComm.Get_parent()
     if intercomm == MPI.COMM_NULL: return
     newcomm = intercomm.Merge(True)
@@ -1255,6 +1398,94 @@ def _MPIBacktranslateReduceOp(arg0):
         return arg0.getOp()
     else:
         return None
+
+
+########################################
+# Communicator Class
+########################################
+
+class CommunicatorLocal(object):
+    'PMI CommunicatorLocal class'
+
+    def __init__(self, cpugroup=None):
+        if not cpugroup:
+            cpugroup = range(0, _MPIcomm.size)
+        self._cpugroup = cpugroup
+        self._MPIsubcomm = None
+        self._MPIsubcommWithController = None
+        self._isActive = False
+        if (max(self._cpugroup) < _MPIcomm.size) and (min(self._cpugroup) >= 0):
+            commgroup = _MPIcomm.Get_group()
+            subcommgroup = commgroup.Incl(self._cpugroup)
+            self._MPIsubcomm = _MPIcomm.Create(subcommgroup)
+            if CONTROLLER in self._cpugroup:
+                self._MPIsubcommWithController = self._MPIsubcomm
+            else:
+                cpugroupWithController = self._cpugroup[:]
+                cpugroupWithController.insert(0, CONTROLLER)
+                commgroupWithController = _MPIcomm.Get_group()
+                subcommgroupWithController = commgroupWithController.Incl(cpugroupWithController)
+                self._MPIsubcommWithController = _MPIcomm.Create(subcommgroupWithController)
+
+    def getMPIsubcomm(self):
+        'getter for MPIsubcomm'
+        return self._MPIsubcomm
+
+    def getMPIsubcommWithController(self):
+        'getter for MPIsubcomm'
+        return self._MPIsubcommWithController
+
+    def getMPIcpugroup(self):
+        'getter for MPIsubgroup'
+        return self._cpugroup
+
+    def isActive(self):
+        return self._isActive
+
+    def activate(self):
+        self._isActive = True
+
+    def deactivate(self):
+        self._isActive = False
+
+
+class Communicator(object):
+    'PMI Communicator class'
+
+    def __init__(self, *args, **kwds):
+        if isController:
+            self.localcomm = create(_translateClass(CommunicatorLocal), *args, **kwds)
+
+    def getMPIsubcomm(self):
+        return self.localcomm._MPIsubcomm
+
+    def getMPIsubcommWithController(self):
+        return self.localcomm._MPIsubcommWithController
+
+    def getMPIcpugroup(self):
+        return self.localcomm._cpugroup
+
+    def isActive(self):
+        return self.localcomm._isActive
+
+    def activate(self):
+        self.localcomm._isActive = True
+
+    def deactivate(self):
+        self.localcomm._isActive = False
+
+
+##################################################
+## check if worker is active
+##################################################
+def workerIsActive():
+    if _PMIComm and _PMIComm.isActive():
+        if _MPIcomm.rank in _PMIComm.getMPIcpugroup():
+            return True
+        else:
+            return False
+    else:
+        return True
 
 
 ##################################################
